@@ -2,6 +2,7 @@
 import random
 from collections import deque
 
+
 class Sample:
     """Represents a reinforcement learning sample.
 
@@ -231,3 +232,6 @@ class ReplayMemory:
 
     def clear(self):
         raise NotImplementedError('This method should be overridden')
+
+
+    

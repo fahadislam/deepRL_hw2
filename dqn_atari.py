@@ -52,9 +52,19 @@ def create_model(window, input_shape, num_actions,
     """
     # Remember you messed up with the initializations
     model = Sequential()
-    model.add(Convolution2D(16, 8, 8, subsample=(4,4), init='normal', border_mode='same',input_shape=(window, input_shape[0], input_shape[1])))
+    model.add(
+        Convolution2D(
+            16,
+            8,
+            8,
+            subsample=(4, 4),
+            init='normal',
+            border_mode='same',
+            input_shape=(window, input_shape[0], input_shape[1])))
     model.add(Activation('relu'))
-    model.add(Convolution2D(32, 4, 4, subsample=(2,2), init='normal', border_mode='same'))
+    model.add(
+        Convolution2D(
+            32, 4, 4, subsample=(2, 2), init='normal', border_mode='same'))
     model.add(Activation('relu'))
     # model.add(Convolution2D(64, 3, 3, subsample=(1,1),init=lambda shape, name: normal(shape, scale=0.01, name=name), border_mode='same'))
     # model.add(Activation('relu'))
@@ -62,9 +72,9 @@ def create_model(window, input_shape, num_actions,
     model.add(Dense(256, init='normal'))
     model.add(Activation('relu'))
     model.add(Dense(num_actions, init='normal'))
-   
+
     adam = Adam(lr=1e-6)
-    model.compile(loss='mse',optimizer=adam)
+    model.compile(loss='mse', optimizer=adam)
     print("We finish building the model")
     return model
 
@@ -125,25 +135,32 @@ def main():  # noqa: D103
 
     # pdb.set_trace()
 
-    ## build model
-    num_actions = env.action_space.n
-    window = 4
-    input_shape = tuple(np.array([84, 84]))
-    model = create_model(window, input_shape, num_actions)
-    memory = ReplayMemory(1000000, 100)     # window length is arbitrary
-    ## build agent
-    dqn_agent = DQNAgent(model,
-                 # preprocessor,
-                 memory, # memory
-                 # policy,
-                 0.09, # gamma
-                 10000, #target_update_freq
-                 1000, #num_burn_in             #to figure out
-                 4,# train_freq
-                 32, #batch_size
-                 num_actions)   #added by me
+    with tf.device('/gpu:0'): 
+        config = tf.ConfigProto()
+        config.gpu_options.allow_growth = True
+        sess = tf.Session(config=config)
 
-    dqn_agent.fit(env, 500000, 1000) 
+        # build model
+        num_actions = env.action_space.n
+        window = 4
+        input_shape = tuple(np.array([84, 84]))
+        model = create_model(window, input_shape, num_actions)
+        memory = ReplayMemory(1000000, 100)  # window length is arbitrary
+        ## build agent
+        dqn_agent = DQNAgent(
+            model,
+            # preprocessor,
+            memory,  # memory
+            # policy,
+            0.09,  # gamma
+            10000,  #target_update_freq
+            1000,  #num_burn_in             #to figure out
+            4,  # train_freq
+            32,  #batch_size
+            num_actions)  #added by me
+
+        dqn_agent.fit(env, 500000, 1000)
+
 
 if __name__ == '__main__':
     main()
