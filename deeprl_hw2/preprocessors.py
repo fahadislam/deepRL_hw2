@@ -103,7 +103,7 @@ class AtariPreprocessor(Preprocessor):
         """
         # TODO solve flicker problem
         state = skimage.color.rgb2gray(state)
-        state = skimage.transform.resize(state,self.new_size)
+        state = skimage.transform.resize(state, self.new_size)
         state = skimage.img_as_ubyte(state)
 
         return state
@@ -116,7 +116,7 @@ class AtariPreprocessor(Preprocessor):
         """
         # TODO solve flicker problem
         state = skimage.color.rgb2gray(state)
-        state = skimage.transform.resize(state,self.new_size)
+        state = skimage.transform.resize(state, self.new_size)
         state = skimage.img_as_float(state)
 
         return state
@@ -136,10 +136,13 @@ class AtariPreprocessor(Preprocessor):
 
     def process_reward(self, reward):
         """Clip reward between -1 and 1."""
-        if reward >= 0:
-            reward = min(1, reward)
+        # NOTE: updated by peiyun, based on DQN paper 
+        if reward > 0:
+            reward = 1 
+            #reward = min(1, reward)
         else:
-            reward = max(-1, reward)
+            reward = -1
+            #reward = max(-1, reward)
 
 
 class PreprocessorSequence(Preprocessor):
@@ -156,9 +159,9 @@ class PreprocessorSequence(Preprocessor):
     return history.process_state_for_network(state)
     """
     def __init__(self):
-        self.atari = AtariPreprocessor((84,84))
+        self.atari = AtariPreprocessor((84, 84))
         self.history = HistoryPreprocessor(3)
 
     def process_state_for_network(self, state):
         state = self.atari.process_state_for_network(state)
-        return self.history.process_state_for_network(state)        
+        return self.history.process_state_for_network(state)
