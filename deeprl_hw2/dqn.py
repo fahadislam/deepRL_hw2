@@ -154,6 +154,7 @@ class DQNAgent:
         #print('Updating policy ... ') 
 
         minibatch = self.memory.sample(self.batch_size)
+        minibatch = self.preprocessor.atari.process_batch(minibatch)
 
         inputs = np.zeros((self.batch_size, minibatch[0].state.shape[1],
                            minibatch[0].state.shape[2],
@@ -169,9 +170,6 @@ class DQNAgent:
 
             #inputs[i:i + 1] = state_t
             inputs[i] = state_t 
-
-            # state_t = process_state_for_network(state_t)
-            # state_t1 = process_state_for_network(state_t1)
 
             targets[i] = self.calc_q_values(state_t)  # Hitting each buttom probability
             Q_sa = self.calc_q_values(state_t1)
@@ -234,12 +232,13 @@ class DQNAgent:
                 x_t1_colored, r_t, is_terminal, _ = env.step(a_t)  # any action
                 acc_reward += r_t
                 s_t1 = self.preprocessor.process_state_for_network(x_t1_colored)
-                s_t = s_t1
+                
                 frame_count += 1
 
                 # add more into replay memory
                 self.memory.append(Sample(s_t, a_t, r_t, s_t1, is_terminal))
-
+                
+                s_t = s_t1    # was a bug
                 # sample minibatches from replay memory
                 if frame_count % self.train_freq != 0 and self.memory.size() >= self.num_burn_in:
                     loss = self.update_policy()

@@ -7,6 +7,7 @@ from deeprl_hw2 import utils
 from deeprl_hw2.core import Preprocessor
 import skimage as skimage
 from skimage import transform, color, exposure
+import copy
 
 class HistoryPreprocessor(Preprocessor):
     """Keeps the last k states.
@@ -102,23 +103,85 @@ class AtariPreprocessor(Preprocessor):
         image conversions.
         """
         # TODO solve flicker problem
-        state = skimage.color.rgb2gray(state)
-        state = skimage.transform.resize(state, self.new_size)
-        state = skimage.img_as_ubyte(state)
+        crop_type = 'top'
+        state = Image.fromarray(state, 'RGB').convert('LA')
+        # state.save("uncropped.png")
 
+        state_ratio = state.size[0] / float(state.size[1])
+        ratio = self.new_size[0] / float(self.new_size[1])
+        #The image is scaled/cropped vertically or horizontally depending on the ratio
+        if ratio > state_ratio:
+            state = state.resize((self.new_size[0], int(round(self.new_size[0] * state.size[1] / state.size[0]))),
+                Image.ANTIALIAS)
+            # Crop in the top, middle or bottom
+            if crop_type == 'bottom':
+                box = (0, 0, state.size[0], self.new_size[1])
+            elif crop_type == 'top':
+                box = (0, state.size[1] - self.new_size[1], state.size[0], state.size[1])
+            else :
+                raise ValueError('ERROR: invalid value for crop_type')
+            state = state.crop(box)
+        # elif ratio < state_ratio:
+        #     state = state.resize((int(round(self.new_size[1] * state.size[0] / state.size[1])), self.new_size[1]),
+        #         Image.ANTIALIAS)
+        #     # Crop in the top, middle or bottom
+        #     if crop_type == 'top':
+        #         box = (0, 0, self.new_size[0], state.size[1])
+        #     elif crop_type == 'bottom':
+        #         box = (state.size[0] - self.new_size[0], 0, state.size[0], state.size[1])
+        #     else :
+        #         raise ValueError('ERROR: invalid value for crop_type')
+        #     state = state.crop(box)
+        # else :
+        #     state = state.resize((self.new_size[0], self.new_size[1]),
+        #         Image.ANTIALIAS)
+        # If the scale is the same, we do not need to crop
+        # state.save("cropped.png")
+        state = np.array(state.convert("L"))
         return state
 
-    def process_state_for_network(self, state):
+    def process_state_for_network(self, state):                 # NEVER CALLED
         """Scale, convert to greyscale and store as float32.
 
         Basically same as process state for memory, but this time
         outputs float32 images.
         """
         # TODO solve flicker problem
-        state = skimage.color.rgb2gray(state)
-        state = skimage.transform.resize(state, self.new_size)
-        state = skimage.img_as_float(state)
+        crop_type = 'top'
+        state = Image.fromarray(state, 'RGB').convert('LA')     #read image to convert to gray
+        # state.save("uncropped.png")
 
+        state_ratio = state.size[0] / float(state.size[1])
+        ratio = self.new_size[0] / float(self.new_size[1])
+        #The image is scaled/cropped vertically or horizontally depending on the ratio
+        if ratio > state_ratio:
+            state = state.resize((self.new_size[0], int(round(self.new_size[0] * state.size[1] / state.size[0]))),
+                Image.ANTIALIAS)
+            # Crop in the top, middle or bottom
+            if crop_type == 'bottom':
+                box = (0, 0, state.size[0], self.new_size[1])
+            elif crop_type == 'top':
+                box = (0, state.size[1] - self.new_size[1], state.size[0], state.size[1])
+            else :
+                raise ValueError('ERROR: invalid value for crop_type')
+            state = state.crop(box)
+        # elif ratio < state_ratio:
+        #     state = state.resize((int(round(self.new_size[1] * state.size[0] / state.size[1])), self.new_size[1]),
+        #         Image.ANTIALIAS)
+        #     # Crop in the top, middle or bottom
+        #     if crop_type == 'top':
+        #         box = (0, 0, self.new_size[0], state.size[1])
+        #     elif crop_type == 'bottom':
+        #         box = (state.size[0] - self.new_size[0], 0, state.size[0], state.size[1])
+        #     else :
+        #         raise ValueError('ERROR: invalid value for crop_type')
+        #     state = state.crop(box)
+        # else :
+        #     state = state.resize((self.new_size[0], self.new_size[1]),
+        #         Image.ANTIALIAS)
+        # If the scale is the same, we do not need to crop
+        # state.save("cropped.png")
+        state = np.array(state.convert("L"),'f')    #convert to array and store as float32
         return state
 
     def process_batch(self, samples):
@@ -128,11 +191,14 @@ class AtariPreprocessor(Preprocessor):
         samples from the replay memory. Meaning you need to convert
         both state and next state values.
         """
-        for sample in samples:
-            sample.state = skimage.img_as_float(sample.state)
-            sample.next_state = skimage.img_as_float(sample.next_state)
+        samples_copy = copy.deepcopy(samples)
+        for sample in samples_copy:
+            # print "before", sample.state.shape, sample.state.dtype
+            sample.state = sample.state.astype(np.float32)
+            # print "after", sample.state.shape, sample.state.dtype
+            sample.next_state = sample.next_state.astype(np.float32)
 
-        return samples
+        return samples_copy
 
     def process_reward(self, reward):
         """Clip reward between -1 and 1."""
@@ -163,5 +229,5 @@ class PreprocessorSequence(Preprocessor):
         self.history = HistoryPreprocessor(3)
 
     def process_state_for_network(self, state):
-        state = self.atari.process_state_for_network(state)
+        state = self.atari.process_state_for_memory(state)
         return self.history.process_state_for_network(state)
