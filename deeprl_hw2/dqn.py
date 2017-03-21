@@ -5,6 +5,7 @@ from deeprl_hw2.policy import UniformRandomPolicy, GreedyEpsilonPolicy, LinearDe
 from deeprl_hw2.core import Sample
 from deeprl_hw2.preprocessors import PreprocessorSequence, HistoryPreprocessor
 
+import pdb 
 
 class DQNAgent:
     """Class implementing DQN.
@@ -72,6 +73,7 @@ class DQNAgent:
         self.frame_count = 0
         self.iterations = 0
 
+    # NOTE: currently integrated into create_model in dqn_atari.py
     def compile(self, optimizer, loss_func):
         """Setup all of the TF graph variables/ops.
 
@@ -89,7 +91,7 @@ class DQNAgent:
         keras.optimizers.Optimizer class. Specifically the Adam
         optimizer.
         """
-        self.q_network.compile(loss='mse', optimizer=adam)
+        self.q_network.compile(loss=loss_func, optimizer=optimizer)
 
     def calc_q_values(self, state):
         """Given a state (or batch of states) calculate the Q-values.
@@ -138,8 +140,7 @@ class DQNAgent:
             action = self.policy.select_action()
 
         else:  #training mode
-            self.policy = LinearDecayGreedyEpsilonPolicy(1.0, 0.1,
-                                                         1000000)  #TODO
+            self.policy = LinearDecayGreedyEpsilonPolicy(1.0, 0.1, 1000000)  #TODO
             action = self.policy.select_action(q_values)
 
         # else:
@@ -164,6 +165,8 @@ class DQNAgent:
         output. They can help you monitor how training is going.
         """
 
+        print('Updating policy ... ') 
+
         minibatch = self.memory.sample(self.batch_size)
 
         inputs = np.zeros((self.batch_size, minibatch[0].state.shape[1],
@@ -183,8 +186,7 @@ class DQNAgent:
             # state_t = process_state_for_network(state_t)
             # state_t1 = process_state_for_network(state_t1)
 
-            targets[i] = self.calc_q_values(
-                state_t)  # Hitting each buttom probability
+            targets[i] = self.calc_q_values(state_t)  # Hitting each buttom probability
             Q_sa = self.calc_q_values(state_t1)
 
             if terminal:
@@ -194,8 +196,8 @@ class DQNAgent:
 
         # targets2 = normalize(targets)
         loss = self.q_network.train_on_batch(inputs, targets)
-        # print("loss", loss) 
-        return loss
+        # print("loss", loss)
+        return loss, Q_sa
 
     def fit(self, env, num_iterations, max_episode_length=None):
         """Fit your model to the provided environment.
@@ -253,7 +255,7 @@ class DQNAgent:
                 self.memory.append(sample)
 
                 if update_flag:
-                    loss = self.update_policy()
+                    loss, Q_sa = self.update_policy()
 
                 if self.iterations == num_iterations:
                     print("returning")
@@ -266,6 +268,9 @@ class DQNAgent:
                     print("terminal state with episode length of ", i)
                     break
                 self.iterations += 1
+
+                if update_flag:
+                    print('Iteration', self.iterations, '/ action', a_t, '/ reward', r_t, '/ Q_max', np.max(Q_sa), '/ loss', loss) 
 
             # to be implemented
             self.memory.end_episode(s_t1, is_terminal)  

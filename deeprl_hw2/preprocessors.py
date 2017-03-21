@@ -32,7 +32,7 @@ class HistoryPreprocessor(Preprocessor):
         """You only want history when you're deciding the current action to take."""
         if self.count == 0:
             self.s_t = np.stack((state, state, state, state), axis=0)
-            self.s_t = self.s_t.reshape(1, self.s_t.shape[0], self.s_t.shape[1], self.s_t.shape[2])
+            self.s_t = self.s_t.reshape(1, self.s_t.shape[0], self.s_t.shape[1], self.s_t.shape[2]) 
         else:
             state = state.reshape(1, 1, state.shape[0], state.shape[1])
             self.s_t = np.append(state, self.s_t[:, :self.history_length, :, :], axis=1)
@@ -138,7 +138,7 @@ class AtariPreprocessor(Preprocessor):
         """Clip reward between -1 and 1."""
         # NOTE: updated by peiyun, based on DQN paper 
         if reward > 0:
-            reward = 1 
+            reward = 1
             #reward = min(1, reward)
         else:
             reward = -1

@@ -7,11 +7,14 @@ import random
 import numpy as np
 import tensorflow as tf
 import gym
-from keras.layers import (Activation, Convolution2D, Dense, Flatten, Input,
-                          Permute)
-from keras.models import Model
+
+import keras
+from keras import initializers 
 from keras.models import Sequential
+from keras.layers import Dense, Flatten
+from keras.layers import Conv2D
 from keras.optimizers import Adam
+from keras.utils import plot_model
 
 import deeprl_hw2 as tfrl
 from deeprl_hw2.dqn import DQNAgent
@@ -51,31 +54,27 @@ def create_model(window, input_shape, num_actions,
       The Q-model.
     """
     # Remember you messed up with the initializations
-    model = Sequential()
-    model.add(
-        Convolution2D(
-            16,
-            8,
-            8,
-            subsample=(4, 4),
-            init='normal',
-            border_mode='same',
-            input_shape=(window, input_shape[0], input_shape[1])))
-    model.add(Activation('relu'))
-    model.add(
-        Convolution2D(
-            32, 4, 4, subsample=(2, 2), init='normal', border_mode='same'))
-    model.add(Activation('relu'))
-    # model.add(Convolution2D(64, 3, 3, subsample=(1,1),init=lambda shape, name: normal(shape, scale=0.01, name=name), border_mode='same'))
-    # model.add(Activation('relu'))
-    model.add(Flatten())
-    model.add(Dense(256, init='normal'))
-    model.add(Activation('relu'))
-    model.add(Dense(num_actions, init='normal'))
 
-    adam = Adam(lr=1e-6)
-    model.compile(loss='mse', optimizer=adam)
-    print("We finish building the model")
+    input_rows, input_cols = input_shape[0], input_shape[1]
+
+    print 'Now we start building the model ... '
+    model = Sequential() 
+    model.add(Conv2D(32, kernel_size=(8,8), strides=(4,4), padding='same',
+                     kernel_initializer=initializers.RandomNormal(stddev=0.01),
+                     activation='relu', input_shape=(window,input_rows,input_cols)))
+    model.add(Conv2D(64, kernel_size=(4,4), strides=(2,2), padding='same',
+                     kernel_initializer=initializers.RandomNormal(stddev=0.01),
+                     activation='relu'))
+    model.add(Conv2D(64, kernel_size=(3,3), strides=(1,1), padding='same',
+                     kernel_initializer=initializers.RandomNormal(stddev=0.01),
+                     activation='relu'))
+    model.add(Flatten())
+    model.add(Dense(512, activation='relu'))
+    model.add(Dense(num_actions, activation='linear')) 
+
+    # plot the architecture of convnet 
+    # plot_model(model, to_file='convnet.png')
+
     return model
 
 
@@ -98,7 +97,8 @@ def get_output_folder(parent_dir, env_name):
     parent_dir/run_dir
       Path to this run's save directory.
     """
-    os.makedirs(parent_dir, exist_ok=True)
+    if not os.path.exists(parent_dir):
+        os.makedirs(parent_dir)
     experiment_id = 0
     for folder_name in os.listdir(parent_dir):
         if not os.path.isdir(os.path.join(parent_dir, folder_name)):
@@ -117,49 +117,48 @@ def get_output_folder(parent_dir, env_name):
 
 
 def main():  # noqa: D103
-    parser = argparse.ArgumentParser(description='Run DQN on Atari Breakout')
-    parser.add_argument('--env', default='Breakout-v0', help='Atari env name')
-    parser.add_argument(
-        '-o', '--output', default='atari-v0', help='Directory to save data to')
+    parser = argparse.ArgumentParser(description='Run DQN on Atari Space Invaders')
+    parser.add_argument('--env', default='SpaceInvaders-v0', help='Atari env name')
+    parser.add_argument('-o', '--output', default='spaceinvaders-v0', help='Directory to save data to')
     parser.add_argument('--seed', default=0, type=int, help='Random seed')
 
     args = parser.parse_args()
-    # args.input_shape = tuple(args.input_shape)
-
-    # args.output = get_output_folder(args.output, args.env)
 
     # here is where you should start up a session,
     # create your DQN agent, create your model, etc.
     # then you can run your fit method.
-    env = gym.make('SpaceInvaders-v0')
 
-    # pdb.set_trace()
+    # parse output dir 
+    args.output = get_output_folder(args.output, args.env)
 
+    # make env 
+    env = gym.make(args.env)
+
+    # build model
+    num_actions = env.action_space.n
+    window = 4
+    input_shape = tuple(np.array([84, 84]))
+    model = create_model(window, input_shape, num_actions)
+    memory = ReplayMemory(1000000, 100)  # window length is arbitrary
+    target_update_freq = 10000
+    num_burn_in = 1000
+    train_freq = 4
+    batch_size = 32
+    gamma = 0.09 
+    num_iterations = 500000
+    max_episode_length = 1000
     with tf.device('/gpu:0'): 
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
         sess = tf.Session(config=config)
 
-        # build model
-        num_actions = env.action_space.n
-        window = 4
-        input_shape = tuple(np.array([84, 84]))
-        model = create_model(window, input_shape, num_actions)
-        memory = ReplayMemory(1000000, 100)  # window length is arbitrary
         ## build agent
-        dqn_agent = DQNAgent(
-            model,
-            # preprocessor,
-            memory,  # memory
-            # policy,
-            0.09,  # gamma
-            10000,  #target_update_freq
-            1000,  #num_burn_in             #to figure out
-            4,  # train_freq
-            32,  #batch_size
-            num_actions)  #added by me
+        dqn_agent = DQNAgent(model, memory, gamma, target_update_freq, num_burn_in,
+                             train_freq, batch_size, num_actions)
 
-        dqn_agent.fit(env, 500000, 1000)
+        adam = Adam(lr=1e-6)
+        dqn_agent.compile(adam, mean_huber_loss)
+        dqn_agent.fit(env, num_iterations, max_episode_length)
 
 
 if __name__ == '__main__':
