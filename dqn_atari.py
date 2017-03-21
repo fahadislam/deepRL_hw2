@@ -99,8 +99,10 @@ def get_output_folder(parent_dir, env_name):
     parent_dir/run_dir
       Path to this run's save directory.
     """
+    
     if not os.path.exists(parent_dir):
         os.makedirs(parent_dir)
+
     experiment_id = 0
     for folder_name in os.listdir(parent_dir):
         if not os.path.isdir(os.path.join(parent_dir, folder_name)):
@@ -115,13 +117,17 @@ def get_output_folder(parent_dir, env_name):
 
     parent_dir = os.path.join(parent_dir, env_name)
     parent_dir = parent_dir + '-run{}'.format(experiment_id)
+
+    if not os.path.exists(parent_dir):
+        os.makedirs(parent_dir)
+    
     return parent_dir
 
 
 def main():  # noqa: D103
     parser = argparse.ArgumentParser(description='Run DQN on Atari Space Invaders')
     parser.add_argument('--env', default='SpaceInvaders-v0', help='Atari env name')
-    parser.add_argument('-o', '--output', default='spaceinvaders-v0', help='Directory to save data to')
+    parser.add_argument('-o', '--output', default='cache', help='Directory to save data to')
     parser.add_argument('--seed', default=0, type=int, help='Random seed')
 
     args = parser.parse_args()
@@ -151,8 +157,8 @@ def main():  # noqa: D103
     learning_rate = 1e-4
     num_iterations = 500000
     max_episode_length = 1000
-    with tf.device('/gpu:0'): 
-        config = tf.ConfigProto()
+    with tf.device('/gpu:1'): 
+        config = tf.ConfigProto(intra_op_parallelism_threads=12)
         config.gpu_options.allow_growth = True
         sess = tf.Session(config=config)
 

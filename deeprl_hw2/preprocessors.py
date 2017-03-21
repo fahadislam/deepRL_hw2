@@ -9,6 +9,8 @@ import skimage as skimage
 from skimage import transform, color, exposure
 import copy
 
+import pdb
+
 class HistoryPreprocessor(Preprocessor):
     """Keeps the last k states.
 
@@ -102,25 +104,38 @@ class AtariPreprocessor(Preprocessor):
         We recommend using the Python Image Library (PIL) to do the
         image conversions.
         """
-        # TODO solve flicker problem
-        crop_type = 'top'
+
         state = Image.fromarray(state, 'RGB').convert('LA')
+        state.save('uncropped.png')
+
+        box = (0, 30, 160, 195)
+        state = state.crop(box)
+        state.save('cropped.png')
+
+        state = state.resize(self.new_size, Image.BILINEAR)
+        state.save('resized.png')
+        
+        # TODO solve flicker problem
+        # crop_type = 'bottom'
+        # state = Image.fromarray(state, 'RGB').convert('LA')
         # state.save("uncropped.png")
 
-        state_ratio = state.size[0] / float(state.size[1])
-        ratio = self.new_size[0] / float(self.new_size[1])
-        #The image is scaled/cropped vertically or horizontally depending on the ratio
-        if ratio > state_ratio:
-            state = state.resize((self.new_size[0], int(round(self.new_size[0] * state.size[1] / state.size[0]))),
-                Image.ANTIALIAS)
-            # Crop in the top, middle or bottom
-            if crop_type == 'bottom':
-                box = (0, 0, state.size[0], self.new_size[1])
-            elif crop_type == 'top':
-                box = (0, state.size[1] - self.new_size[1], state.size[0], state.size[1])
-            else :
-                raise ValueError('ERROR: invalid value for crop_type')
-            state = state.crop(box)
+        # state_ratio = state.size[0] / float(state.size[1])
+        # ratio = self.new_size[0] / float(self.new_size[1])
+        # #The image is scaled/cropped vertically or horizontally depending on the ratio
+        # if ratio > state_ratio:
+        #     state = state.resize((self.new_size[0], int(round(self.new_size[0] * state.size[1] / state.size[0]))),
+        #         Image.ANTIALIAS)
+        #     # Crop in the top, middle or bottom
+        #     if crop_type == 'bottom':
+        #         box = (0, 0, state.size[0], self.new_size[1])
+        #     elif crop_type == 'top':
+        #         box = (0, state.size[1] - self.new_size[1], state.size[0], state.size[1])
+        #     else :
+        #         raise ValueError('ERROR: invalid value for crop_type')
+        #     state = state.crop(box)
+        # state.save('cropped.png')
+        # pdb.set_trace()
         # elif ratio < state_ratio:
         #     state = state.resize((int(round(self.new_size[1] * state.size[0] / state.size[1])), self.new_size[1]),
         #         Image.ANTIALIAS)

@@ -212,8 +212,8 @@ class DQNAgent:
 
         # observation = env.render(mode='rgb_array')
         # history_preprocessor = HistoryPreprocessor()
+        snapshot_interval = 0 
         while True:
-            snapshot_interval = 0 
             frame_count = 0 
             acc_reward = 0
             x_t = env.reset()
