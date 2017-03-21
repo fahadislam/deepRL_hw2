@@ -2,6 +2,7 @@
 import random
 from collections import deque
 import numpy as np
+import operator
 
 
 class Sample:
@@ -238,8 +239,8 @@ class ReplayMemory:
       used.
     end_episode(final_state, is_terminal, debug_info=None)
       Set the final state of an episode and mark whether it was a true
-      terminal state (i.e. the env returned is_terminal=True), of it
-      is is an artificial terminal state (i.e. agent quit the episode
+      terminal state (i.e. the env returned is_terminal=True), or if it
+      is an artificial terminal state (i.e. agent quit the episode
       early, but agent could have kept running episode).
     sample(batch_size, indexes=None)
       Return list of samples from the memory. Each class will
@@ -261,18 +262,22 @@ class ReplayMemory:
         index where the next sample should be inserted in the list.
         """
         self.max_size = max_size
-        self.window_length = window_length
-        self.D = deque()
+        self.index = 0
+        # self.window_length = window_length
+        self._data = []
 
     def size(self):
-        return len(self.D)
+        return len(self._data)
 
     # def append(self, state, action, reward):
-    def append(self, sample):    
+    def append(self, sample):   
+        # print(self.index) 
         # raise NotImplementedError('This method should be overridden')
-        self.D.append(sample)
-        if len(self.D) > self.max_size:
-            self.D.popleft()
+        if len(self._data) == self.max_size:
+            self._data[self.index]= sample
+        else:
+            self._data.append(sample)
+        self.index= (self.index + 1) % self.max_size
 
     def end_episode(self, final_state, is_terminal):
         # raise NotImplementedError('This method should be overridden')
@@ -280,7 +285,14 @@ class ReplayMemory:
 
     def sample(self, batch_size, indexes=None):
         # raise NotImplementedError('This method should be overridden')
-        return random.sample(self.D, batch_size)
+        batch = []
+        for i in range(batch_size):
+            key = random.randrange(0,batch_size)
+            if len(self._data) == self.max_size:
+                batch.append(self._data[(key + self.index) % self.max_size])
+            else:
+                batch.append(self._data[key])
+        return batch
 
     def clear(self):
         raise NotImplementedError('This method should be overridden')
