@@ -20,6 +20,8 @@ import deeprl_hw2 as tfrl
 from deeprl_hw2.dqn import DQNAgent
 from deeprl_hw2.objectives import mean_huber_loss
 from deeprl_hw2.core import ReplayMemory
+from deeprl_hw2.policy import LinearDecayGreedyEpsilonPolicy
+from deeprl_hw2.preprocessors import PreprocessorSequence
 
 import pdb
 
@@ -144,7 +146,9 @@ def main():  # noqa: D103
     num_burn_in = 1000
     train_freq = 4
     batch_size = 32
-    gamma = 0.09 
+    gamma = 0.99
+    epsilon = 0.05
+    learning_rate = 1e-4
     num_iterations = 500000
     max_episode_length = 1000
     with tf.device('/gpu:0'): 
@@ -152,11 +156,18 @@ def main():  # noqa: D103
         config.gpu_options.allow_growth = True
         sess = tf.Session(config=config)
 
-        ## build agent
-        dqn_agent = DQNAgent(model, memory, gamma, target_update_freq, num_burn_in,
-                             train_freq, batch_size, num_actions)
+        # preprocessor
+        preprocessor = PreprocessorSequence()
+        
+        # policy
+        policy = LinearDecayGreedyEpsilonPolicy(epsilon, epsilon, 1000000)
+        
+        # build agent
+        dqn_agent = DQNAgent(model, preprocessor, memory, policy, gamma,
+                             target_update_freq, num_burn_in, train_freq,
+                             batch_size, num_actions, args.output)
 
-        adam = Adam(lr=1e-6)
+        adam = Adam(lr=learning_rate)
         dqn_agent.compile(adam, mean_huber_loss)
         dqn_agent.fit(env, num_iterations, max_episode_length)
 

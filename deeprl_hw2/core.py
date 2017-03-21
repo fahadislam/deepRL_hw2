@@ -1,6 +1,7 @@
 """Core classes."""
 import random
 from collections import deque
+import numpy as np
 
 
 class Sample:
@@ -160,6 +161,53 @@ class Preprocessor:
         """
         pass
 
+# class RingBuffer:
+#     def __init__(self, dimension, size):
+#         self.data = np.zeros((size, dimension), dtype=np.uint8)
+#         self.index = 0
+#         self.full = False
+
+#     def append(self, x):
+#         self.data[self.index] = x
+#         if self.index == self.data.shape[0] - 1:
+#             self.index = 0
+#             self.full = True
+#         else:
+#             self.index += 1
+
+#     def get(self, i):
+
+
+# TODO: implement a memory which stores states instead of samples 
+class ReplayMemoryEfficient:
+    # TODO: implement __iter__, __getitem__, and __len__
+    def __init__(self, max_size, window_length):
+        self.max_size = max_size
+        self.window_length = window_length
+        self.D = RingBuffer(max_size)
+
+    def size(self):
+        return len(self.D)
+
+    # def append(self, state, action, reward):
+    def append(self, sample):    
+        # raise NotImplementedError('This method should be overridden')
+        self.D.append(sample)
+        if len(self.D) > self.max_size:
+            self.D.popleft()
+
+    def end_episode(self, final_state, is_terminal):
+        # raise NotImplementedError('This method should be overridden')
+        pass
+
+    def sample(self, batch_size, indexes=None):
+        # raise NotImplementedError('This method should be overridden')
+        return random.sample(self.D, batch_size)
+
+    def clear(self):
+        raise NotImplementedError('This method should be overridden')
+            
+        
 
 class ReplayMemory:
     """Interface for replay memories.
@@ -200,6 +248,7 @@ class ReplayMemory:
     clear()
       Reset the memory. Deletes all references to the samples.
     """
+
     def __init__(self, max_size, window_length):
         """Setup memory.
 
@@ -214,6 +263,9 @@ class ReplayMemory:
         self.max_size = max_size
         self.window_length = window_length
         self.D = deque()
+
+    def size(self):
+        return len(self.D)
 
     # def append(self, state, action, reward):
     def append(self, sample):    

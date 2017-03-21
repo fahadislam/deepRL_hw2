@@ -1,11 +1,12 @@
 """Main DQN agent."""
+import json 
+import os
 import numpy as np
 
-from deeprl_hw2.policy import UniformRandomPolicy, GreedyEpsilonPolicy, LinearDecayGreedyEpsilonPolicy
 from deeprl_hw2.core import Sample
-from deeprl_hw2.preprocessors import PreprocessorSequence, HistoryPreprocessor
 
 import pdb 
+
 
 class DQNAgent:
     """Class implementing DQN.
@@ -46,31 +47,23 @@ class DQNAgent:
       How many samples in each minibatch.
     """
 
-    def __init__(
-            self,
-            q_network,
-            # preprocessor,
-            memory,
-            # policy,
-            gamma,
-            target_update_freq,
-            num_burn_in,
-            train_freq,
-            batch_size,
-            num_actions):  #added by me
+    # TODO: remove num_actions - instead, derive from q_network
+    def __init__(self, q_network, preprocessor, memory, policy, gamma,
+                 target_update_freq, num_burn_in, train_freq, batch_size,
+                 num_actions, log_dir): 
 
         self.q_network = q_network
-        # self.preprocessor = preprocessor
+        self.preprocessor = preprocessor
         self.memory = memory
-        # self.policy = policy
+        self.policy = policy
         self.gamma = gamma
         self.target_update_freq = target_update_freq
         self.num_burn_in = num_burn_in
         self.train_freq = train_freq
         self.batch_size = batch_size
+        self.log_dir = log_dir
 
         self.num_actions = num_actions
-        self.frame_count = 0
         self.iterations = 0
 
     # NOTE: currently integrated into create_model in dqn_atari.py
@@ -130,19 +123,12 @@ class DQNAgent:
         --------
         selected action
         """
-        q_values = self.calc_q_values(state)
 
-        action = 0
-        epsilon = 0.05
-
-        if self.iterations < self.num_burn_in:
-            self.policy = UniformRandomPolicy(self.num_actions)
-            action = self.policy.select_action()
-
-        else:  #training mode
-            self.policy = LinearDecayGreedyEpsilonPolicy(1.0, 0.1, 1000000)  #TODO
+        if self.memory.size() < self.num_burn_in:
+            action = np.random.randint(0, self.num_actions)
+        else:
+            q_values = self.calc_q_values(state)
             action = self.policy.select_action(q_values)
-
         # else:
         #     self.policy = GreedyEpsilonPolicy(epsilon)
         #     action = policy.select_action(q_values)
@@ -165,7 +151,7 @@ class DQNAgent:
         output. They can help you monitor how training is going.
         """
 
-        print('Updating policy ... ') 
+        #print('Updating policy ... ') 
 
         minibatch = self.memory.sample(self.batch_size)
 
@@ -176,12 +162,13 @@ class DQNAgent:
 
         for i in range(0, self.batch_size):
             state_t = minibatch[i].state
-            action_t = minibatch[i].action  #This is action index
+            action_t = minibatch[i].action  
             reward_t = minibatch[i].reward
             state_t1 = minibatch[i].next_state
             terminal = minibatch[i].is_terminal
 
-            inputs[i:i + 1] = state_t  #I saved down s_t
+            #inputs[i:i + 1] = state_t
+            inputs[i] = state_t 
 
             # state_t = process_state_for_network(state_t)
             # state_t1 = process_state_for_network(state_t1)
@@ -197,7 +184,7 @@ class DQNAgent:
         # targets2 = normalize(targets)
         loss = self.q_network.train_on_batch(inputs, targets)
         # print("loss", loss)
-        return loss, Q_sa
+        return loss
 
     def fit(self, env, num_iterations, max_episode_length=None):
         """Fit your model to the provided environment.
@@ -228,54 +215,59 @@ class DQNAgent:
         # observation = env.render(mode='rgb_array')
         # history_preprocessor = HistoryPreprocessor()
         while True:
+            snapshot_interval = 0 
+            frame_count = 0 
             acc_reward = 0
             x_t = env.reset()
 
-            Preprocessor = PreprocessorSequence()
-            s_t = Preprocessor.process_state_for_network(x_t)
-            a_tm1 = -1
+            s_t = self.preprocessor.process_state_for_network(x_t)
+            a_last = -1
             for i in range(max_episode_length):
-                update_flag = False
-                if self.iterations > self.num_burn_in:
-                    self.frame_count += 1
-                    if (self.frame_count % self.train_freq == 0):
-                        update_flag = True
 
-                if update_flag:
-                    a_t = self.select_action(s_t)
+                # select action
+                if a_last >= 0 and frame_count % self.train_freq != 0:
+                    a_t = a_last
                 else:
-                    a_t = a_tm1
-                a_tm1 = a_t
-                        
+                    a_t = self.select_action(s_t)
+
+                # simulate 
                 x_t1_colored, r_t, is_terminal, _ = env.step(a_t)  # any action
                 acc_reward += r_t
-                s_t1 = Preprocessor.process_state_for_network(x_t1_colored)
+                s_t1 = self.preprocessor.process_state_for_network(x_t1_colored)
+                s_t = s_t1
+                frame_count += 1
 
-                sample = Sample(s_t, a_t, r_t, s_t1, is_terminal)
-                self.memory.append(sample)
+                # add more into replay memory
+                self.memory.append(Sample(s_t, a_t, r_t, s_t1, is_terminal))
 
-                if update_flag:
-                    loss, Q_sa = self.update_policy()
+                # sample minibatches from replay memory
+                if frame_count % self.train_freq != 0 and self.memory.size() >= self.num_burn_in:
+                    loss = self.update_policy()
 
                 if self.iterations == num_iterations:
-                    print("returning")
+                    print("We've reached the maximum number of iterations... ")
                     return
-                s_t = s_t1
 
                 if is_terminal:
                     # to be implemented
                     self.memory.end_episode(s_t1, is_terminal)
-                    print("terminal state with episode length of ", i)
                     break
+                
                 self.iterations += 1
-
-                if update_flag:
-                    print('Iteration', self.iterations, '/ action', a_t, '/ reward', r_t, '/ Q_max', np.max(Q_sa), '/ loss', loss) 
 
             # to be implemented
             self.memory.end_episode(s_t1, is_terminal)  
-            print("acc_reward", acc_reward, self.iterations)
-            acc_reward = 0
+            print('Iteration', self.iterations, '/ acc reward', acc_reward)
+
+            snapshot_interval += 1
+            if snapshot_interval == 5:
+                print('Saving model snapshots ... ') 
+                model_name = 'model_iter%08d' % self.iterations
+                model_path = os.path.join(self.log_dir, model_name)
+                self.q_network.save_weights(model_path + '.h5')
+                with open(model_path + '.json', "w") as outfile:
+                    json.dump(self.q_network.to_json(), outfile)
+                snapshot_interval = 0
 
     def evaluate(self, env, num_episodes, max_episode_length=None):
         """Test your agent with a provided environment.
