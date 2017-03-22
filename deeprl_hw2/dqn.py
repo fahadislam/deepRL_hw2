@@ -158,7 +158,7 @@ class DQNAgent:
         #print('Updating policy ... ') 
 
         minibatch = self.memory.sample(self.batch_size)
-        minibatch = self.preprocessor.atari.process_batch(minibatch)
+        # minibatch = self.preprocessor.atari.process_batch(minibatch)
 
         state_shape = minibatch[0].state.shape
         inputs = np.zeros((self.batch_size, state_shape[1], state_shape[2], state_shape[3]))  # 32, 4, 84, 84
@@ -242,7 +242,8 @@ class DQNAgent:
                 s_t1 = self.preprocessor.process_state_for_network(x_t1_colored)
 
                 # add more into replay memory
-                self.memory.append(Sample(s_t, a_t, r_t, s_t1, is_terminal))
+                # self.memory.append(Sample(s_t, a_t, r_t, s_t1, is_terminal))
+                self.memory.append(s_t, a_t, r_t)
                 
                 s_t = s_t1    # was a bug
                 # sample minibatches from replay memory
@@ -277,7 +278,6 @@ class DQNAgent:
 
                 plt.plot(episode_rewards)
                 plt.savefig('episode_rewards.png')
-
 
     def evaluate(self, env, num_episodes, max_episode_length=None):
         """Test your agent with a provided environment.

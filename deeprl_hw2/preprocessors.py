@@ -106,98 +106,21 @@ class AtariPreprocessor(Preprocessor):
         """
 
         state = Image.fromarray(state, 'RGB').convert('LA')
-        state.save('uncropped.png')
+        # state.save('uncropped.png')
 
         box = (0, 30, 160, 195)
         state = state.crop(box)
-        state.save('cropped.png')
+        # state.save('cropped.png')
 
         state = state.resize(self.new_size, Image.BILINEAR)
-        state.save('resized.png')
+        # state.save('resized.png')
         
-        # TODO solve flicker problem
-        # crop_type = 'bottom'
-        # state = Image.fromarray(state, 'RGB').convert('LA')
-        # state.save("uncropped.png")
-
-        # state_ratio = state.size[0] / float(state.size[1])
-        # ratio = self.new_size[0] / float(self.new_size[1])
-        # #The image is scaled/cropped vertically or horizontally depending on the ratio
-        # if ratio > state_ratio:
-        #     state = state.resize((self.new_size[0], int(round(self.new_size[0] * state.size[1] / state.size[0]))),
-        #         Image.ANTIALIAS)
-        #     # Crop in the top, middle or bottom
-        #     if crop_type == 'bottom':
-        #         box = (0, 0, state.size[0], self.new_size[1])
-        #     elif crop_type == 'top':
-        #         box = (0, state.size[1] - self.new_size[1], state.size[0], state.size[1])
-        #     else :
-        #         raise ValueError('ERROR: invalid value for crop_type')
-        #     state = state.crop(box)
-        # state.save('cropped.png')
-        # pdb.set_trace()
-        # elif ratio < state_ratio:
-        #     state = state.resize((int(round(self.new_size[1] * state.size[0] / state.size[1])), self.new_size[1]),
-        #         Image.ANTIALIAS)
-        #     # Crop in the top, middle or bottom
-        #     if crop_type == 'top':
-        #         box = (0, 0, self.new_size[0], state.size[1])
-        #     elif crop_type == 'bottom':
-        #         box = (state.size[0] - self.new_size[0], 0, state.size[0], state.size[1])
-        #     else :
-        #         raise ValueError('ERROR: invalid value for crop_type')
-        #     state = state.crop(box)
-        # else :
-        #     state = state.resize((self.new_size[0], self.new_size[1]),
-        #         Image.ANTIALIAS)
-        # If the scale is the same, we do not need to crop
-        # state.save("cropped.png")
         state = np.array(state.convert("L"))
         return state
 
-    def process_state_for_network(self, state):                 # NEVER CALLED
-        """Scale, convert to greyscale and store as float32.
-
-        Basically same as process state for memory, but this time
-        outputs float32 images.
-        """
-        # TODO solve flicker problem
-        crop_type = 'top'
-        state = Image.fromarray(state, 'RGB').convert('LA')     #read image to convert to gray
-        # state.save("uncropped.png")
-
-        state_ratio = state.size[0] / float(state.size[1])
-        ratio = self.new_size[0] / float(self.new_size[1])
-        #The image is scaled/cropped vertically or horizontally depending on the ratio
-        if ratio > state_ratio:
-            state = state.resize((self.new_size[0], int(round(self.new_size[0] * state.size[1] / state.size[0]))),
-                Image.ANTIALIAS)
-            # Crop in the top, middle or bottom
-            if crop_type == 'bottom':
-                box = (0, 0, state.size[0], self.new_size[1])
-            elif crop_type == 'top':
-                box = (0, state.size[1] - self.new_size[1], state.size[0], state.size[1])
-            else :
-                raise ValueError('ERROR: invalid value for crop_type')
-            state = state.crop(box)
-        # elif ratio < state_ratio:
-        #     state = state.resize((int(round(self.new_size[1] * state.size[0] / state.size[1])), self.new_size[1]),
-        #         Image.ANTIALIAS)
-        #     # Crop in the top, middle or bottom
-        #     if crop_type == 'top':
-        #         box = (0, 0, self.new_size[0], state.size[1])
-        #     elif crop_type == 'bottom':
-        #         box = (state.size[0] - self.new_size[0], 0, state.size[0], state.size[1])
-        #     else :
-        #         raise ValueError('ERROR: invalid value for crop_type')
-        #     state = state.crop(box)
-        # else :
-        #     state = state.resize((self.new_size[0], self.new_size[1]),
-        #         Image.ANTIALIAS)
-        # If the scale is the same, we do not need to crop
-        # state.save("cropped.png")
-        state = np.array(state.convert("L"),'f')    #convert to array and store as float32
-        return state
+    def process_state_for_network(self, state):
+        # NOTE: we should not need to call this function
+        pass
 
     def process_batch(self, samples):
         """The batches from replay memory will be uint8, convert to float32.
@@ -206,14 +129,15 @@ class AtariPreprocessor(Preprocessor):
         samples from the replay memory. Meaning you need to convert
         both state and next state values.
         """
-        samples_copy = copy.deepcopy(samples)
-        for sample in samples_copy:
-            # print "before", sample.state.shape, sample.state.dtype
-            sample.state = sample.state.astype(np.float32)
-            # print "after", sample.state.shape, sample.state.dtype
-            sample.next_state = sample.next_state.astype(np.float32)
+        # NOTE: we should not need to call this function
+        # samples_copy = copy.deepcopy(samples)
+        # for sample in samples_copy:
+        #     # print "before", sample.state.shape, sample.state.dtype
+        #     sample.state = sample.state.astype(np.float32)
+        #     # print "after", sample.state.shape, sample.state.dtype
+        #     sample.next_state = sample.next_state.astype(np.float32)
 
-        return samples_copy
+        # return samples_copy
 
     def process_reward(self, reward):
         """Clip reward between -1 and 1."""

@@ -1,6 +1,7 @@
 """Core classes."""
 import random
 from collections import deque
+
 import numpy as np
 import operator
 
@@ -165,6 +166,65 @@ class Preprocessor:
         pass
 
 
+class ReplayMemoryEfficient:
+
+    def __init__(self, max_size, window_size, frame_size):
+        self.max_size = max_size
+        self.window_size = window_size
+        self.frame_size = frame_size
+        self.index = 0
+        self.full = False
+        
+        self.frames = np.zeros((max_size, frame_size[0], frame_size[1]), dtype=np.uint8)
+        self.actions = np.zeros(max_size, dtype=np.uint8)
+        self.rewards = np.zeros(max_size, dtype=np.float32)
+        self.terminals = np.zeros(max_size, dtype=np.bool_)
+
+    def size(self):
+        if self.full:
+            return self.max_size
+        else:
+            return self.index+1
+        
+    def check(self):
+        if self.index == self.max_size - 1:
+            self.full = True
+            self.index = 0
+        
+    def append(self, state, action, reward):
+        self.frames[self.index, :, :] = state[0][0]
+        self.actions[self.index] = action
+        self.rewards[self.index] = reward
+        self.index += 1
+        self.check()
+        
+    def end_episode(self, final_state, is_terminal):
+        self.frames[self.index, :, :] = final_state[0][0]
+        self.terminals[self.index] = True
+        self.index += 1
+        self.check()
+
+    def fetch_state(self, indices):
+        state = self.frames[indices].astype(np.float32)
+        return state.reshape(1, state.shape[0], state.shape[1], state.shape[2])
+        
+    def sample(self, batch_size):
+        # NOTE: leave space for nearby frames
+        if self.full:
+            I = np.random.randint(self.window_size-1, self.max_size-1, batch_size)
+        else:
+            I = np.random.randint(self.window_size-1, self.index, batch_size)
+
+        return [Sample(self.fetch_state(np.arange(i-(self.window_size-1), i+1)), 
+                       self.actions[i], self.rewards[i],
+                       self.fetch_state(np.arange(i-(self.window_size-2), i+2)), 
+                       self.terminals[i+1]) for i in I]
+
+    def clear(self):
+        self.full = False
+        self.index = 0
+
+
 class ReplayMemory:
     """Interface for replay memories.
 
@@ -246,3 +306,4 @@ class ReplayMemory:
 
     def clear(self):
         raise NotImplementedError('This method should be overridden')
+    

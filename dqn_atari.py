@@ -19,7 +19,7 @@ from keras.utils import plot_model
 import deeprl_hw2 as tfrl
 from deeprl_hw2.dqn import DQNAgent
 from deeprl_hw2.objectives import mean_huber_loss
-from deeprl_hw2.core import ReplayMemory
+from deeprl_hw2.core import ReplayMemory, ReplayMemoryEfficient
 from deeprl_hw2.policy import LinearDecayGreedyEpsilonPolicy
 from deeprl_hw2.preprocessors import PreprocessorSequence
 
@@ -141,10 +141,12 @@ def main():  # noqa: D103
 
     # build model
     num_actions = env.action_space.n
+    mem_size = 1000000
     window = 4
-    input_shape = tuple(np.array([84, 84]))
+    input_shape = (84, 84)
     model = create_model(window, input_shape, num_actions)
-    memory = ReplayMemory(1000000, 100)  # window length is arbitrary
+    #memory = ReplayMemory(1000000, 100)  # window length is arbitrary
+    memory = ReplayMemoryEfficient(mem_size, window, input_shape)
     target_update_freq = 10000
     num_burn_in = 1000
     train_freq = 4
@@ -155,6 +157,10 @@ def main():  # noqa: D103
     num_iterations = 500000
     max_episode_length = 1000
     with tf.device('/gpu:1'): 
+        config = tf.ConfigProto(intra_op_parallelism_threads=12)
+        config.gpu_options.allow_growth = True
+        sess = tf.Session(config=config)
+        
         # preprocessor
         preprocessor = PreprocessorSequence()
         
@@ -170,11 +176,6 @@ def main():  # noqa: D103
         # dqn_agent.compile(adam, mean_huber_loss)
         dqn_agent.compile(adam, mean_huber_loss)
         dqn_agent.fit(env, num_iterations, max_episode_length)
-
-    config = tf.ConfigProto(intra_op_parallelism_threads=12)
-    config.gpu_options.allow_growth = True
-    sess = tf.Session(config=config)
-    sess.run()
 
 if __name__ == '__main__':
     main()
