@@ -190,7 +190,7 @@ class ReplayMemoryEfficient:
         if self.index == self.max_size - 1:
             self.full = True
             self.index = 0
-        
+
     def append(self, state, action, reward):
         self.frames[self.index, :, :] = state[0][0]
         self.actions[self.index] = action
@@ -207,14 +207,23 @@ class ReplayMemoryEfficient:
     def fetch_state(self, indices):
         state = self.frames[indices].astype(np.float32)
         return state.reshape(1, state.shape[0], state.shape[1], state.shape[2])
-        
-    def sample(self, batch_size):
-        # NOTE: leave space for nearby frames
-        if self.full:
-            I = np.random.randint(self.window_size-1, self.max_size-1, batch_size)
-        else:
-            I = np.random.randint(self.window_size-1, self.index, batch_size)
 
+    def draw(self, batch_size):
+        cnt = 0
+        I = -np.ones(batch_size,dtype=np.int)
+        while True:
+            if self.full:
+                i = np.random.randint(self.window_size-1, self.max_size-1)
+            else:
+                i = np.random.randint(self.window_size-1, self.index)
+            if not np.any(self.terminals[i-(self.window_size-1):i+1]):
+                I[cnt] = i
+                cnt += 1
+            if cnt == batch_size:
+                return I
+    
+    def sample(self, batch_size):
+        I = self.draw(batch_size)
         return [Sample(self.fetch_state(np.arange(i-(self.window_size-1), i+1)), 
                        self.actions[i], self.rewards[i],
                        self.fetch_state(np.arange(i-(self.window_size-2), i+2)), 

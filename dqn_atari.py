@@ -162,7 +162,8 @@ def main():  # noqa: D103
     gamma = 0.99
     epsilon = 0.05
     learning_rate = 1e-4
-    num_iterations = 500000
+    updates_per_epoch = 50000
+    num_iterations = 5000000
     max_episode_length = 10000
     with tf.device('/gpu:%d'%gpu_id): 
         config = tf.ConfigProto(intra_op_parallelism_threads=12)
@@ -178,7 +179,7 @@ def main():  # noqa: D103
         # build agent
         dqn_agent = DQNAgent(model, target, preprocessor, memory, policy, gamma,
                              target_update_freq, num_burn_in, train_freq,
-                             batch_size, num_actions, args.output)
+                             batch_size, num_actions, updates_per_epoch, args.output)
 
         #adam = Adam(lr=learning_rate)
         #dqn_agent.compile(adam, mean_huber_loss)

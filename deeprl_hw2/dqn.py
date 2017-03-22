@@ -3,6 +3,9 @@ import json
 import os
 import copy
 import numpy as np
+import random
+import datetime
+import time
 
 from matplotlib import pyplot as plt
 
@@ -54,7 +57,7 @@ class DQNAgent:
     # TODO: remove num_actions - instead, derive from q_network
     def __init__(self, q_source, q_target, preprocessor, memory, policy, gamma,
                  target_update_freq, num_burn_in, train_freq, batch_size,
-                 num_actions, log_dir): 
+                 num_actions, updates_per_epoch, log_dir): 
 
         self.q_source = q_source
         self.q_target = q_target
@@ -70,6 +73,7 @@ class DQNAgent:
 
         self.num_actions = num_actions
         self.iterations = 0
+        self.updates_per_epoch = updates_per_epoch
         self.reset_target_count = 0
 
     # NOTE: currently integrated into create_model in dqn_atari.py
@@ -136,8 +140,14 @@ class DQNAgent:
         if self.memory.size() < self.num_burn_in:
             action = np.random.randint(0, self.num_actions)
         else:
-            q_values = self.calc_q_values(state, False)
-            action = self.policy.select_action(q_values)
+            if random.random() <= self.policy.epsilon:
+                action = np.random.randint(0, self.num_actions)
+            else:
+                # print 'Computing q values'
+                q_values = self.calc_q_values(state, False)
+                action = np.argmax(q_values)
+            if self.policy.epsilon > self.policy.end_value:
+                self.policy.epsilon -= self.policy.step
         # else:
         #     self.policy = GreedyEpsilonPolicy(epsilon)
         #     action = policy.select_action(q_values)
@@ -246,11 +256,13 @@ class DQNAgent:
         episode_num = 0
         episode_rewards = []
         episode_loss = []
+        episode_length = []
         num_updates = 0
         epoch = 1
 
         while True:
             episode_loss.append(0)
+            episode_length.append(0)
             acc_reward = 0
 
             x_t = env.reset()
@@ -283,7 +295,6 @@ class DQNAgent:
                     episode_loss[-1] += loss
                     num_updates += 1
                     
-
                 if self.iterations == num_iterations:
                     print("We've reached the maximum number of iterations... ")
                     return
@@ -292,8 +303,9 @@ class DQNAgent:
                     break
                 
                 self.iterations += 1
-
-                if num_updates > epoch * 50000:
+                episode_length[-1] += 1
+                
+                if num_updates > epoch * self.updates_per_epoch:
                     print('Saving model at epoch %d ... ' % epoch)
                     model_path = os.path.join(self.log_dir, 'model_epoch%03d' % epoch)
                     self.q_source.save_weights(model_path + '.h5')
@@ -305,9 +317,11 @@ class DQNAgent:
             self.memory.end_episode(s_t1, is_terminal)
             episode_num += 1
             episode_rewards.append(acc_reward)
-            
-            print 'episode %d / iterations %d / num_updates %d / acc_reward %d / loss %.3f' % (
-                episode_num, self.iterations, num_updates, acc_reward, episode_loss[-1])
+
+            ts = time.time()
+            st = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
+            print st, ': episode %d, iterations %d, length %d(%d), num_updates %d, acc_reward %.2f(%.2f) , loss %.3f(%.3f)' % (
+                episode_num, self.iterations, episode_length[-1], np.mean(episode_length), num_updates, acc_reward, np.mean(episode_rewards), episode_loss[-1], np.mean(episode_loss))
             
     def evaluate(self, env, num_episodes, max_episode_length=None):
         """Test your agent with a provided environment.
