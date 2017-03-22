@@ -8,7 +8,7 @@ from matplotlib import pyplot as plt
 
 from deeprl_hw2.core import Sample
 
-from deeprl_hw2.visual import flatten_state
+# from deeprl_hw2.visual import flatten_state
 
 import pdb 
 
@@ -52,11 +52,12 @@ class DQNAgent:
     """
 
     # TODO: remove num_actions - instead, derive from q_network
-    def __init__(self, q_network, preprocessor, memory, policy, gamma,
+    def __init__(self, q_source, q_target, preprocessor, memory, policy, gamma,
                  target_update_freq, num_burn_in, train_freq, batch_size,
                  num_actions, log_dir): 
 
-        self.q_network = q_network
+        self.q_source = q_source
+        self.q_target = q_target
         self.preprocessor = preprocessor
         self.memory = memory
         self.policy = policy
@@ -69,6 +70,7 @@ class DQNAgent:
 
         self.num_actions = num_actions
         self.iterations = 0
+        self.reset_target_count = 0
 
     # NOTE: currently integrated into create_model in dqn_atari.py
     def compile(self, optimizer, loss_func):
@@ -88,9 +90,14 @@ class DQNAgent:
         keras.optimizers.Optimizer class. Specifically the Adam
         optimizer.
         """
-        self.q_network.compile(loss=loss_func, optimizer=optimizer)
+        self.q_source.compile(loss=loss_func, optimizer=optimizer)
+        self.q_target.compile(loss=loss_func, optimizer=optimizer)
 
-    def calc_q_values(self, state):
+        for (layer_source, layer_target) in zip(self.q_source.layers, self.q_target.layers):
+            w = layer_source.get_weights()
+            layer_target.set_weights(w)
+
+    def calc_q_values(self, state, target):
         """Given a state (or batch of states) calculate the Q-values.
 
         Basically run your network on these states.
@@ -99,12 +106,10 @@ class DQNAgent:
         ------
         Q-values for the state(s)
         """
-        # memory.sample(batch_size)
-        # Q_sa = np.zeros((len(state), self.num_actions))  
-        # for i in range(state.shape(0)):
-        # raw_input()
-        Q_sa = self.q_network.predict(state)
-        return Q_sa
+        if target:
+            return self.q_target.predict(state)
+        else:
+            return self.q_source.predict(state)
 
     def select_action(self, state, **kwargs):
         """Select the action based on the current state.
@@ -131,7 +136,7 @@ class DQNAgent:
         if self.memory.size() < self.num_burn_in:
             action = np.random.randint(0, self.num_actions)
         else:
-            q_values = self.calc_q_values(state)
+            q_values = self.calc_q_values(state, False)
             action = self.policy.select_action(q_values)
         # else:
         #     self.policy = GreedyEpsilonPolicy(epsilon)
@@ -174,17 +179,31 @@ class DQNAgent:
             #inputs[i:i + 1] = state_t
             inputs[i] = state_t 
 
-            targets[i] = self.calc_q_values(state_t)  # Hitting each buttom probability
-            Q_sa = self.calc_q_values(state_t1)
+            targets[i] = self.calc_q_values(state_t, False)  # Hitting each buttom probability
+            Q_hat = self.calc_q_values(state_t1, True)
 
             if terminal:
                 targets[i, action_t] = reward_t
             else:
-                targets[i, action_t] = reward_t + self.gamma * np.max(Q_sa)
+                targets[i, action_t] = reward_t + self.gamma * np.max(Q_hat)
 
         # NOTE: fix training examples and targets to make sure loss is going down
+
+        self.reset_target_count += 1
+        if self.reset_target_count == self.target_update_freq:
+            self.reset_target_count = 0;
+            # weights_target = []
+            # for layer in self.q_source.layers:
+            for (layer_source, layer_target) in zip(self.q_source.layers, self.q_target.layers):
+                # print("LAYER SOURCE")
+                # print(layer_source.get_weights())   
+                # print("LAYER TARGET")
+                # print(layer_target.get_weights())
+                w = layer_source.get_weights()
+                layer_target.set_weights(w)
+        
         # for i in range(10):
-        loss = self.q_network.train_on_batch(inputs, targets)
+        loss = self.q_source.train_on_batch(inputs, targets)
         # print 'Iteration: %d, Loss: %f' % (i, loss)
 
         return loss
@@ -219,9 +238,10 @@ class DQNAgent:
         # history_preprocessor = HistoryPreprocessor()
         episode_num = 0
         episode_rewards = []
-        episode_loss = 0
+        episode_loss = []
 
         while True:
+            episode_loss.append(0)
             acc_reward = 0
 
             x_t = env.reset()
@@ -248,7 +268,7 @@ class DQNAgent:
                 # sample minibatches from replay memory
                 if i % self.train_freq == 0 and self.memory.size() >= self.num_burn_in:
                     loss = self.update_policy()
-                    episode_loss += loss
+                    episode_loss[-1] += loss
 
                 if self.iterations == num_iterations:
                     print("We've reached the maximum number of iterations... ")
@@ -259,7 +279,8 @@ class DQNAgent:
                 
                 self.iterations += 1
 
-            print ('episode', episode_num, 'acc_reward', acc_reward, 'loss', episode_loss)
+            print ('episode', episode_num, 'iterations', self.iterations,
+             'acc_reward', acc_reward, 'loss', episode_loss[-1])
             
             # to be implemented
             self.memory.end_episode(s_t1, is_terminal)
@@ -271,9 +292,9 @@ class DQNAgent:
 
                 model_name = 'model_episode%04d_iter%08d' % (episode_num, self.iterations)
                 model_path = os.path.join(self.log_dir, model_name)
-                self.q_network.save_weights(model_path + '.h5')
+                self.q_source.save_weights(model_path + '.h5')
                 with open(model_path + '.json', "w") as outfile:
-                    json.dump(self.q_network.to_json(), outfile)
+                    json.dump(self.q_source.to_json(), outfile)
 
                 plt.plot(episode_rewards)
                 plt.savefig('episode_rewards.png')

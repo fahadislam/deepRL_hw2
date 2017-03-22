@@ -144,8 +144,9 @@ def main():  # noqa: D103
     window = 4
     input_shape = tuple(np.array([84, 84]))
     model = create_model(window, input_shape, num_actions)
+    target = create_model(window, input_shape, num_actions)
     memory = ReplayMemory(1000000, 100)  # window length is arbitrary
-    target_update_freq = 10000
+    target_update_freq = 1000
     num_burn_in = 1000
     train_freq = 4
     batch_size = 32
@@ -162,13 +163,13 @@ def main():  # noqa: D103
         policy = LinearDecayGreedyEpsilonPolicy(1, 0.1, 1000000)
         
         # build agent
-        dqn_agent = DQNAgent(model, preprocessor, memory, policy, gamma,
+        dqn_agent = DQNAgent(model, target, preprocessor, memory, policy, gamma,
                              target_update_freq, num_burn_in, train_freq,
                              batch_size, num_actions, args.output)
 
         adam = Adam(lr=learning_rate)
         # dqn_agent.compile(adam, mean_huber_loss)
-        dqn_agent.compile(adam, mean_huber_loss)
+        dqn_agent.compile(adam, "mse")
         dqn_agent.fit(env, num_iterations, max_episode_length)
 
     config = tf.ConfigProto(intra_op_parallelism_threads=12)
