@@ -2,11 +2,13 @@
 import json 
 import os
 import numpy as np
+from matplotlib import pyplot as plt
 
 from deeprl_hw2.core import Sample
 
-import pdb 
+from deeprl_hw2.visual import flatten_state
 
+import pdb 
 
 class DQNAgent:
     """Class implementing DQN.
@@ -156,10 +158,9 @@ class DQNAgent:
         minibatch = self.memory.sample(self.batch_size)
         minibatch = self.preprocessor.atari.process_batch(minibatch)
 
-        inputs = np.zeros((self.batch_size, minibatch[0].state.shape[1],
-                           minibatch[0].state.shape[2],
-                           minibatch[0].state.shape[3]))  # 32, 80, 80, 4
-        targets = np.zeros((inputs.shape[0], self.num_actions))
+        state_shape = minibatch[0].state.shape
+        inputs = np.zeros((self.batch_size, state_shape[1], state_shape[2], state_shape[3]))  # 32, 4, 84, 84
+        targets = np.zeros((self.batch_size, self.num_actions))
 
         for i in range(0, self.batch_size):
             state_t = minibatch[i].state
@@ -212,10 +213,13 @@ class DQNAgent:
 
         # observation = env.render(mode='rgb_array')
         # history_preprocessor = HistoryPreprocessor()
-        snapshot_interval = 0 
+        episode_num = 0
+        episode_rewards = []
+        episode_loss = 0
+
         while True:
-            frame_count = 0 
             acc_reward = 0
+
             x_t = env.reset()
 
             s_t = self.preprocessor.process_state_for_network(x_t)
@@ -223,7 +227,7 @@ class DQNAgent:
             for i in range(max_episode_length):
 
                 # select action
-                if a_last >= 0 and frame_count % self.train_freq != 0:
+                if a_last >= 0 and (i+1) % self.train_freq != 0:
                     a_t = a_last
                 else:
                     a_t = self.select_action(s_t)
@@ -232,41 +236,44 @@ class DQNAgent:
                 x_t1_colored, r_t, is_terminal, _ = env.step(a_t)  # any action
                 acc_reward += r_t
                 s_t1 = self.preprocessor.process_state_for_network(x_t1_colored)
-                
-                frame_count += 1
 
                 # add more into replay memory
                 self.memory.append(Sample(s_t, a_t, r_t, s_t1, is_terminal))
                 
                 s_t = s_t1    # was a bug
                 # sample minibatches from replay memory
-                if frame_count % self.train_freq != 0 and self.memory.size() >= self.num_burn_in:
+                if i % self.train_freq == 0 and self.memory.size() >= self.num_burn_in:
                     loss = self.update_policy()
+                    episode_loss += loss
 
                 if self.iterations == num_iterations:
                     print("We've reached the maximum number of iterations... ")
                     return
 
                 if is_terminal:
-                    # to be implemented
-                    self.memory.end_episode(s_t1, is_terminal)
                     break
                 
                 self.iterations += 1
 
+            print ('episode', episode_num, 'acc_reward', acc_reward, 'loss', episode_loss)
+            
             # to be implemented
-            self.memory.end_episode(s_t1, is_terminal)  
-            print('Iteration', self.iterations, '/ acc reward', acc_reward)
+            self.memory.end_episode(s_t1, is_terminal)
+            episode_num += 1
+            episode_rewards.append(acc_reward)
+            
+            if episode_num % 20 == 0:
+                print('Saving model snapshots at episode %d ... ' % episode_num) 
 
-            snapshot_interval += 1
-            if snapshot_interval == 5:
-                print('Saving model snapshots ... ') 
-                model_name = 'model_iter%08d' % self.iterations
+                model_name = 'model_episode%04d_iter%08d' % (episode_num, self.iterations)
                 model_path = os.path.join(self.log_dir, model_name)
                 self.q_network.save_weights(model_path + '.h5')
                 with open(model_path + '.json', "w") as outfile:
                     json.dump(self.q_network.to_json(), outfile)
-                snapshot_interval = 0
+
+                plt.plot(episode_rewards)
+                plt.savefig('episode_rewards.png')
+
 
     def evaluate(self, env, num_episodes, max_episode_length=None):
         """Test your agent with a provided environment.

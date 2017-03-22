@@ -61,17 +61,14 @@ def create_model(window, input_shape, num_actions,
 
     print 'Now we start building the model ... '
     model = Sequential() 
-    model.add(Conv2D(32, kernel_size=(8,8), strides=(4,4), padding='same',
+    model.add(Conv2D(16, kernel_size=(8,8), strides=(4,4), padding='same',
                      kernel_initializer=initializers.RandomNormal(stddev=0.01),
                      activation='relu', input_shape=(window,input_rows,input_cols)))
-    model.add(Conv2D(64, kernel_size=(4,4), strides=(2,2), padding='same',
-                     kernel_initializer=initializers.RandomNormal(stddev=0.01),
-                     activation='relu'))
-    model.add(Conv2D(64, kernel_size=(3,3), strides=(1,1), padding='same',
+    model.add(Conv2D(32, kernel_size=(4,4), strides=(2,2), padding='same',
                      kernel_initializer=initializers.RandomNormal(stddev=0.01),
                      activation='relu'))
     model.add(Flatten())
-    model.add(Dense(512, activation='relu'))
+    model.add(Dense(256, activation='relu'))
     model.add(Dense(num_actions, activation='linear')) 
 
     # plot the architecture of convnet 
@@ -174,7 +171,8 @@ def main():  # noqa: D103
                              batch_size, num_actions, args.output)
 
         adam = Adam(lr=learning_rate)
-        dqn_agent.compile(adam, mean_huber_loss)
+        # dqn_agent.compile(adam, mean_huber_loss)
+        dqn_agent.compile(adam, 'mse')
         dqn_agent.fit(env, num_iterations, max_episode_length)
 
 
