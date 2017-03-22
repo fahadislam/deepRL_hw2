@@ -241,51 +241,8 @@ class ReplayMemory:
         pass
 
     def sample(self, batch_size, indexes=None):
-        #I = np.random.randint(0, len(self._data), batch_size)
-        I = np.arange(batch_size)
+        I = np.random.randint(0, len(self._data), batch_size)
         return [self._data[i] for i in I]
 
     def clear(self):
         raise NotImplementedError('This method should be overridden')
-
-
-class ReplayMemoryEfficient:
-    def __init__(self, max_size, window_length):
-        self.max_size = max_size
-        self.window_length = window_length
-        self.index = 0
-        self._data = []
-
-    def size(self):
-        return len(self._data)
-
-    # def append(self, state, action, reward):
-    def append(self, sample):   
-        # print(self.index) 
-        # raise NotImplementedError('This method should be overridden')
-        if len(self._data) == self.max_size:
-            self._data[self.index]= sample
-        else:
-            self._data.append(sample)
-                                
-        self.index= (self.index + 1) % self.max_size
-                                
-    def end_episode(self, final_state, is_terminal):
-        # raise NotImplementedError('This method should be overridden')
-        pass
-
-    def sample(self, batch_size, indexes=None):
-        # raise NotImplementedError('This method should be overridden')
-        batch = []
-        for i in range(batch_size):
-            key = random.randrange(0,batch_size)
-            if len(self._data) == self.max_size:
-                batch.append(self._data[(key + self.index) % self.max_size])
-            else:
-                batch.append(self._data[key])
-        return batch
-
-    def clear(self):
-        raise NotImplementedError('This method should be overridden')
-
-    

@@ -1,7 +1,9 @@
 """Main DQN agent."""
 import json 
 import os
+import copy
 import numpy as np
+
 from matplotlib import pyplot as plt
 
 from deeprl_hw2.core import Sample
@@ -180,9 +182,11 @@ class DQNAgent:
             else:
                 targets[i, action_t] = reward_t + self.gamma * np.max(Q_sa)
 
-        # targets2 = normalize(targets)
+        # NOTE: fix training examples and targets to make sure loss is going down
+        # for i in range(10):
         loss = self.q_network.train_on_batch(inputs, targets)
-        # print("loss", loss)
+        # print 'Iteration: %d, Loss: %f' % (i, loss)
+
         return loss
 
     def fit(self, env, num_iterations, max_episode_length=None):
