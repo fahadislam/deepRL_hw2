@@ -166,26 +166,33 @@ class DQNAgent:
         # minibatch = self.preprocessor.atari.process_batch(minibatch)
 
         state_shape = minibatch[0].state.shape
-        inputs = np.zeros((self.batch_size, state_shape[1], state_shape[2], state_shape[3]))  # 32, 4, 84, 84
-        targets = np.zeros((self.batch_size, self.num_actions))
+        state_ts = np.zeros((self.batch_size, state_shape[1], state_shape[2], state_shape[3]))  # 32, 4, 84, 84
+        state_t1s = np.zeros((self.batch_size, state_shape[1], state_shape[2], state_shape[3]))  # 32, 4, 84, 84
+        # targets = np.zeros((self.batch_size, self.num_actions))
 
         for i in range(0, self.batch_size):
-            state_t = minibatch[i].state
+            state_ts[i] = minibatch[i].state
+            state_t1s[i] = minibatch[i].next_state
+            
+        targets = self.calc_q_values(state_ts, False)
+        Q_hat = self.calc_q_values(state_t1s, True)
+        
+        for i in range(0, self.batch_size):
+            # state_t = minibatch[i].state
             action_t = minibatch[i].action  
             reward_t = minibatch[i].reward
-            state_t1 = minibatch[i].next_state
+            # state_t1 = minibatch[i].next_state
             terminal = minibatch[i].is_terminal
 
             #inputs[i:i + 1] = state_t
-            inputs[i] = state_t 
-
-            targets[i] = self.calc_q_values(state_t, False)  # Hitting each buttom probability
-            Q_hat = self.calc_q_values(state_t1, True)
+            # inputs[i] = state_t 
+            # targets[i] = self.calc_q_values(state_t, False)  # Hitting each buttom probability
+            # Q_hat = self.calc_q_values(state_t1, True)
 
             if terminal:
                 targets[i, action_t] = reward_t
             else:
-                targets[i, action_t] = reward_t + self.gamma * np.max(Q_hat)
+                targets[i, action_t] = reward_t + self.gamma * np.max(Q_hat[i])
 
         # NOTE: fix training examples and targets to make sure loss is going down
 
@@ -203,7 +210,7 @@ class DQNAgent:
                 layer_target.set_weights(w)
         
         # for i in range(10):
-        loss = self.q_source.train_on_batch(inputs, targets)
+        loss = self.q_source.train_on_batch(state_ts, targets)
         # print 'Iteration: %d, Loss: %f' % (i, loss)
 
         return loss
@@ -239,6 +246,8 @@ class DQNAgent:
         episode_num = 0
         episode_rewards = []
         episode_loss = []
+        num_updates = 0
+        epoch = 1
 
         while True:
             episode_loss.append(0)
@@ -259,6 +268,8 @@ class DQNAgent:
                 # simulate 
                 x_t1_colored, r_t, is_terminal, _ = env.step(a_t)  # any action
                 acc_reward += r_t
+
+                # TODO: get rid of preprocessor (handle inside replay mem)
                 s_t1 = self.preprocessor.process_state_for_network(x_t1_colored)
 
                 # add more into replay memory
@@ -270,6 +281,8 @@ class DQNAgent:
                 if i % self.train_freq == 0 and self.memory.size() >= self.num_burn_in:
                     loss = self.update_policy()
                     episode_loss[-1] += loss
+                    num_updates += 1
+                    
 
                 if self.iterations == num_iterations:
                     print("We've reached the maximum number of iterations... ")
@@ -280,26 +293,22 @@ class DQNAgent:
                 
                 self.iterations += 1
 
-            print ('episode', episode_num, 'iterations', self.iterations,
-             'acc_reward', acc_reward, 'loss', episode_loss[-1])
-            
+                if num_updates > epoch * 50000:
+                    print('Saving model at epoch %d ... ' % epoch)
+                    model_path = os.path.join(self.log_dir, 'model_epoch%03d' % epoch)
+                    self.q_source.save_weights(model_path + '.h5')
+                    with open(model_path + '.json', 'w') as outfile:
+                        json.dump(self.q_source.to_json(), outfile)
+                    epoch += 1
+
             # to be implemented
             self.memory.end_episode(s_t1, is_terminal)
             episode_num += 1
             episode_rewards.append(acc_reward)
             
-            if episode_num % 20 == 0:
-                print('Saving model snapshots at episode %d ... ' % episode_num) 
-
-                model_name = 'model_episode%04d_iter%08d' % (episode_num, self.iterations)
-                model_path = os.path.join(self.log_dir, model_name)
-                self.q_source.save_weights(model_path + '.h5')
-                with open(model_path + '.json', "w") as outfile:
-                    json.dump(self.q_source.to_json(), outfile)
-
-                plt.plot(episode_rewards)
-                plt.savefig('episode_rewards.png')
-
+            print 'episode %d / iterations %d / num_updates %d / acc_reward %d / loss %.3f' % (
+                episode_num, self.iterations, num_updates, acc_reward, episode_loss[-1])
+            
     def evaluate(self, env, num_episodes, max_episode_length=None):
         """Test your agent with a provided environment.
         

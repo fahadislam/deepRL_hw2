@@ -13,11 +13,12 @@ from keras import initializers
 from keras.models import Sequential
 from keras.layers import Dense, Flatten
 from keras.layers import Conv2D
-from keras.optimizers import Adam
+from keras.optimizers import Adam, RMSprop
 from keras.utils import plot_model
 
 import deeprl_hw2 as tfrl
 from deeprl_hw2.dqn import DQNAgent
+# from deeprl_hw2.dqn2 import DQNAgent
 from deeprl_hw2.objectives import mean_huber_loss
 from deeprl_hw2.core import ReplayMemory, ReplayMemoryEfficient
 from deeprl_hw2.policy import LinearDecayGreedyEpsilonPolicy
@@ -136,6 +137,12 @@ def main():  # noqa: D103
     # parse output dir 
     args.output = get_output_folder(args.output, args.env)
 
+    # gpu id
+    gpu_id = 2
+    
+    #
+    os.environ['CUDA_VISIBLE_DEVICES'] = '%d'%gpu_id
+
     # make env 
     env = gym.make(args.env)
 
@@ -148,8 +155,7 @@ def main():  # noqa: D103
     target = create_model(window, input_shape, num_actions)
     # memory = ReplayMemory(1000000, 100)  # window length is arbitrary
     memory = ReplayMemoryEfficient(mem_size, window, input_shape)
-    # target_update_freq = 10000
-    target_update_freq = 1000
+    target_update_freq = 10000
     num_burn_in = 1000
     train_freq = 4
     batch_size = 32
@@ -157,10 +163,10 @@ def main():  # noqa: D103
     epsilon = 0.05
     learning_rate = 1e-4
     num_iterations = 500000
-    max_episode_length = 1000
-    with tf.device('/gpu:1'): 
+    max_episode_length = 10000
+    with tf.device('/gpu:%d'%gpu_id): 
         config = tf.ConfigProto(intra_op_parallelism_threads=12)
-        config.gpu_options.allow_growth = True
+        config.gpu_options.allow_growth = False
         sess = tf.Session(config=config)
         
         # preprocessor
@@ -174,9 +180,11 @@ def main():  # noqa: D103
                              target_update_freq, num_burn_in, train_freq,
                              batch_size, num_actions, args.output)
 
-        adam = Adam(lr=learning_rate)
-        # dqn_agent.compile(adam, mean_huber_loss)
-        dqn_agent.compile(adam, "mse")
+        #adam = Adam(lr=learning_rate)
+        #dqn_agent.compile(adam, mean_huber_loss)
+        #dqn_agent.compile(adam, "mse")
+        rmsprop = RMSprop(lr=learning_rate)
+        dqn_agent.compile(rmsprop, mean_huber_loss)
         dqn_agent.fit(env, num_iterations, max_episode_length)
 
 if __name__ == '__main__':

@@ -3,7 +3,8 @@ import json
 import os
 import copy
 import numpy as np
-import time 
+import time
+import random
 
 from matplotlib import pyplot as plt
 
@@ -151,12 +152,15 @@ class DQNAgent:
         if self.memory.size() < self.num_burn_in:
             action = np.random.randint(0, self.num_actions)
         else:
-            q_values = self.calc_q_values(state, False)
-            action = self.policy.select_action(q_values)
-        # else:
-        #     self.policy = GreedyEpsilonPolicy(epsilon)
-        #     action = policy.select_action(q_values)
-
+            if random.random() <= self.policy.epsilon:
+                action = np.random.randint(0, self.num_actions)
+            else:
+                print 'Computing q values'
+                q_values = self.calc_q_values(state, False)
+                action = np.argmax(q_values)
+            if self.policy.epsilon > self.policy.end_value:
+                self.policy.epsilon -= self.policy.step
+            
         return action
 
     def update_policy(self):
@@ -181,30 +185,32 @@ class DQNAgent:
         # minibatch = self.preprocessor.atari.process_batch(minibatch)
 
         state_shape = minibatch[0].state.shape
-        inputs = np.zeros((self.batch_size, state_shape[1], state_shape[2], state_shape[3]))  # 32, 4, 84, 84
-        targets = np.zeros((self.batch_size, self.num_actions))
-
+        # inputs = np.zeros((self.batch_size, state_shape[1], state_shape[2], state_shape[3]))  # 32, 4, 84, 84
+        # targets = np.zeros((self.batch_size, self.num_actions))
+        state_ts = np.zeros((self.batch_size, state_shape[1], state_shape[2], state_shape[3]))  # 32, 4, 84, 84
+        state_t1s = np.zeros((self.batch_size, state_shape[1], state_shape[2], state_shape[3]))  # 32, 4, 84, 84
         for i in range(0, self.batch_size):
-            state_t = minibatch[i].state
+            state_ts[i] = minibatch[i].state
+            state_t1s[i] = minibatch[i].next_state
+            
+        targets = self.calc_q_values(state_ts, False)
+        Q_hat = self.calc_q_values(state_t1s, True)
+        
+        for i in range(0, self.batch_size):
+            # state_t = minibatch[i].state
             action_t = minibatch[i].action  
             reward_t = minibatch[i].reward
-            state_t1 = minibatch[i].next_state
+            # state_t1 = minibatch[i].next_state
             terminal = minibatch[i].is_terminal
 
-            #inputs[i:i + 1] = state_t
-            inputs[i] = state_t 
-
-            
-            targets[i] = self.calc_q_values(state_t, False)  # Hitting each buttom probability
-
-            
-
-            Q_hat = self.calc_q_values(state_t1, True)
+            # inputs[i] = state_t 
+            # targets[i] = self.calc_q_values(state_t, False)  # Hitting each buttom probability
+            # Q_hat = self.calc_q_values(state_t1, True)
 
             if terminal:
                 targets[i, action_t] = reward_t
             else:
-                targets[i, action_t] = reward_t + self.gamma * np.max(Q_hat)
+                targets[i, action_t] = reward_t + self.gamma * np.max(Q_hat[i])
 
         # NOTE: fix training examples and targets to make sure loss is going down
 
@@ -224,7 +230,8 @@ class DQNAgent:
         # for i in range(10):
         start_time = time.time()
         self.train_c += 1
-        loss = self.q_source.train_on_batch(inputs, targets)
+        # loss = self.q_source.train_on_batch(inputs, targets)
+        loss = self.q_source.train_on_batch(state_ts, targets)
 
         self.train_t += time.time() - start_time
         # print 'Iteration: %d, Loss: %f' % (i, loss)
@@ -312,6 +319,7 @@ class DQNAgent:
                     break
                 
                 self.iterations += 1
+                # print 'iterations: %d, fwd_pass_c: %d' % (self.iterations, self.fwd_pass_c)
 
                 self.iter_t += time.time() - start_time
             print "TIMES"

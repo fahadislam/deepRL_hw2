@@ -140,7 +140,6 @@ class LinearDecayGreedyEpsilonPolicy(Policy):
         self.start_value = start_value
         self.end_value = end_value
         self.num_steps = num_steps
-
         self.step = (start_value - end_value) / num_steps
         self.epsilon = start_value
 
@@ -159,10 +158,10 @@ class LinearDecayGreedyEpsilonPolicy(Policy):
         Any:
           Selected action.
         """
-        if random.random() <= self.epsilon:
-            action = np.random.randint(0, q_values.shape[1])
-        else:
-            action = np.argmax(q_values)
+        # if random.random() <= self.epsilon:
+        #     action = np.random.randint(0, q_values.shape[1])
+        # else:
+        action = np.argmax(q_values)
 
         if self.epsilon > self.end_value:
             self.epsilon -= self.step
