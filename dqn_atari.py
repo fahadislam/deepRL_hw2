@@ -27,8 +27,8 @@ from deeprl_hw2.preprocessors import PreprocessorSequence
 import pdb
 
 
-def create_model(window, input_shape, num_actions,
-                 model_name='q_network'):  # noqa: D103
+def create_model_large(window, input_shape, num_actions,
+                       model_name='q_network'):  # noqa: D103
     """Create the Q-network model.
 
     Use Keras to construct a keras.models.Model instance (you can also
@@ -84,6 +84,57 @@ def create_model(window, input_shape, num_actions,
     return model
 
 
+def create_model_small(window, input_shape, num_actions,
+                       model_name='q_network'):  # noqa: D103
+    """Create the Q-network model.
+
+    Use Keras to construct a keras.models.Model instance (you can also
+    use the SequentialModel class).
+
+    We highly recommend that you use tf.name_scope as discussed in
+    class when creating the model and the layers. This will make it
+    far easier to understnad your network architecture if you are
+    logging with tensorboard.
+
+    Parameters
+    ----------
+    window: int
+      Each input to the network is a sequence of frames. This value
+      defines how many frames are in the sequence.
+    input_shape: tuple(int, int)
+      The expected input image size.
+    num_actions: int
+      Number of possible actions. Defined by the gym environment.
+    model_name: str
+      Useful when debugging. Makes the model show up nicer in tensorboard.
+
+    Returns
+    -------
+    keras.models.Model
+      The Q-model.
+    """
+    # Remember you messed up with the initializations
+
+    input_rows, input_cols = input_shape[0], input_shape[1]
+
+    print 'Now we start building the model ... '
+    model = Sequential() 
+    model.add(Conv2D(16, kernel_size=(8,8), strides=(4,4), padding='same',
+                     kernel_initializer=initializers.RandomNormal(stddev=0.01),
+                     activation='relu', input_shape=(window,input_rows,input_cols)))
+    model.add(Conv2D(32, kernel_size=(4,4), strides=(2,2), padding='same',
+                     kernel_initializer=initializers.RandomNormal(stddev=0.01),
+                     activation='relu'))
+    model.add(Flatten())
+    model.add(Dense(256, activation='relu'))
+    model.add(Dense(num_actions, activation='linear')) 
+
+    # plot the architecture of convnet 
+    # plot_model(model, to_file='convnet.png')
+
+    return model
+
+
 def get_output_folder(parent_dir, env_name, mode='train', experiment_id=0):
     """Return save folder.
 
@@ -131,7 +182,7 @@ def get_output_folder(parent_dir, env_name, mode='train', experiment_id=0):
 
 def train(args):
     # gpu id
-    gpu_id = 3
+    gpu_id = args.gpu
     os.environ['CUDA_VISIBLE_DEVICES'] = '%d'%gpu_id
     # make env 
     env = gym.make(args.env)
@@ -141,8 +192,15 @@ def train(args):
     mem_size = 1000000
     window = 4
     input_shape = (84, 84)
-    model = create_model(window, input_shape, num_actions)
-    target = create_model(window, input_shape, num_actions)
+    # model = create_model_small(window, input_shape, num_actions)
+    # target = create_model_small(window, input_shape, num_actions)
+    if args.type == 'normal':
+        if args.netsize == 'small':
+            model = create_model_small(window, input_shape, num_actions)
+            target = create_model_small(window, input_shape, num_actions)
+        elif args.netsize == 'large':
+            model = create_model_large(window, input_shape, num_actions)
+            target = create_model_large(window, input_shape, num_actions)
     # memory = ReplayMemory(1000000, 100)  # window length is arbitrary
     memory = ReplayMemoryEfficient(mem_size, window, input_shape)
     target_update_freq = 10000
@@ -177,7 +235,7 @@ def train(args):
 
 def test(args):
     # gpu id
-    gpu_id = 3
+    gpu_id = args.gpu
     os.environ['CUDA_VISIBLE_DEVICES'] = '%d'%gpu_id
     # make env 
     env = gym.make(args.env)
@@ -189,8 +247,13 @@ def test(args):
     mem_size = 1000000
     window = 4
     input_shape = (84, 84)
-    model = create_model(window, input_shape, num_actions)
-    target = create_model(window, input_shape, num_actions)
+    if args.type == 'normal':
+        if args.netsize == 'small':
+            model = create_model_small(window, input_shape, num_actions)
+            target = create_model_small(window, input_shape, num_actions)
+        elif args.netsize == 'large':
+            model = create_model_large(window, input_shape, num_actions)
+            target = create_model_large(window, input_shape, num_actions)
     memory = ReplayMemoryEfficient(mem_size, window, input_shape)
     target_update_freq = 10000
     num_burn_in = 1000
@@ -233,16 +296,23 @@ def test(args):
 
 def main():  # noqa: D103
     parser = argparse.ArgumentParser(description='Run DQN on Atari Space Invaders')
+    parser.add_argument('--gpu', default=0, type=int, help='Atari env name')
     parser.add_argument('--env', default='SpaceInvaders-v0', help='Atari env name')
-    parser.add_argument('--mode', default='train', help='train or test')
-    parser.add_argument('--run', default=0, type=int, help='train or test')
+    parser.add_argument('--type', default='normal', type=str, help='normal|double|duel')
+    parser.add_argument('--mode', default='train', help='train|test')
+    parser.add_argument('--netsize', default='small', type=str, help='small|large')
+    # parser.add_argument('--run', default=0, type=int, help='run index')
     parser.add_argument('--submit', default=False, type=bool, help='epoch (for test)')
     parser.add_argument('--epoch', default=0, type=int, help='epoch (for test)')
     parser.add_argument('-o', '--output', default='cache', help='Directory to save data to')
     parser.add_argument('--seed', default=0, type=int, help='Random seed')
 
     args = parser.parse_args()
-    args.output = get_output_folder(args.output, args.env, args.mode, args.run)
+    # args.output = get_output_folder(args.output, args.env, args.mode, args.run)
+    args.output = os.path.join(args.output, '%s-%s-%s'%(args.env, args.type, args.netsize))
+    if not os.path.exists(args.output):
+        os.makedirs(args.output)
+
     if args.mode == 'train':
         train(args)
     elif args.mode == 'test':

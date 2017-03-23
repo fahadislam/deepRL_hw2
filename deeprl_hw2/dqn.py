@@ -64,10 +64,6 @@ class DQNAgent:
                  target_update_freq, num_burn_in, train_freq, batch_size,
                  num_actions, updates_per_epoch, log_dir):
 
-        config = tf.ConfigProto(intra_op_parallelism_threads=12)
-        config.gpu_options.allow_growth = True
-        self.sess = tf.Session(config=config)
-
         self.q_source = q_source
         self.q_target = q_target
         self.preprocessor = preprocessor
