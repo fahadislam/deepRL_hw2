@@ -180,21 +180,22 @@ def get_output_folder(parent_dir, env_name, mode='train', experiment_id=0):
     return parent_dir
 
 
-def train(args):
+def main(args):
     # gpu id
     gpu_id = args.gpu
     os.environ['CUDA_VISIBLE_DEVICES'] = '%d'%gpu_id
     # make env 
     env = gym.make(args.env)
+    if args.mode == 'test' and args.submit:
+        monitor_log = os.path.join(args.output, 'monitor.log')
+        env = wrappers.Monitor(env, monitor_log)
     # build model
     # actions 0-5: 0 do nothing, 1 fire, 2 right, 3 left, 4 right+fire, 5 left+fire
     num_actions = env.action_space.n
     mem_size = 1000000
     window = 4
     input_shape = (84, 84)
-    # model = create_model_small(window, input_shape, num_actions)
-    # target = create_model_small(window, input_shape, num_actions)
-    if args.type == 'normal':
+    if args.type == 'normal' or args.type == 'double':
         if args.netsize == 'small':
             model = create_model_small(window, input_shape, num_actions)
             target = create_model_small(window, input_shape, num_actions)
@@ -212,6 +213,7 @@ def train(args):
     learning_rate = 1e-4
     updates_per_epoch = 50000
     num_iterations = 50000000
+    eval_episodes = 200
     max_episode_length = 10000
     with tf.device('/gpu:%d'%gpu_id): 
         config = tf.ConfigProto(intra_op_parallelism_threads=12)
@@ -220,81 +222,37 @@ def train(args):
         # preprocessor
         preprocessor = PreprocessorSequence()
         # policy
-        policy = LinearDecayGreedyEpsilonPolicy(1, 0.1, 1000000)
+        if args.mode == 'train':
+            policy = LinearDecayGreedyEpsilonPolicy(1, 0.1, 1000000)
+        elif args.mode == 'test':
+            policy = GreedyEpsilonPolicy(epsilon)
         # build agent
-        dqn_agent = DQNAgent(model, target, preprocessor, memory, policy, gamma,
-                             target_update_freq, num_burn_in, train_freq,
-                             batch_size, num_actions, updates_per_epoch, args.output)
-        #adam = Adam(lr=learning_rate)
-        #dqn_agent.compile(adam, mean_huber_loss)
-        #dqn_agent.compile(adam, "mse")
-        rmsprop = RMSprop(lr=learning_rate)
-        dqn_agent.compile_networks(rmsprop, mean_huber_loss)
-        dqn_agent.fit(env, num_iterations, max_episode_length)
+        dqn_agent = DQNAgent(args.type, model, target, preprocessor, memory, policy,
+                             gamma, target_update_freq, num_burn_in, train_freq,
+                             batch_size, num_actions, updates_per_epoch,
+                             args.output)
+        if args.mode == 'train': # compile net and train with fit
+            rmsprop = RMSprop(lr=learning_rate)
+            dqn_agent.compile_networks(rmsprop, mean_huber_loss)
+            dqn_agent.fit(env, num_iterations, max_episode_length)
+        elif args.mode == 'test': # load net and evaluate
+            model_path = os.path.join(args.output, 'model_epoch%03d' % args.epoch)
+            dqn_agent.load_networks(model_path)
+            lengths, rewards = dqn_agent.evaluate(env, eval_episodes, max_episode_length)
+            if args.submit:
+                gym.upload(monitor_log, api_key='sk_wa5MgeDTnOQ209qBCP7jQ')
+            else:
+                log_file = open(os.path.join(args.output, 'evaluation.txt'), 'a+')
+                log_file.write('%d %f %f %f %f\n' % (args.epoch,
+                                                     np.mean(lengths),
+                                                     np.std(lengths),
+                                                     np.mean(rewards),
+                                                     np.std(rewards)))
+                log_file.close()
+    env.close()
 
 
-def test(args):
-    # gpu id
-    gpu_id = args.gpu
-    os.environ['CUDA_VISIBLE_DEVICES'] = '%d'%gpu_id
-    # make env 
-    env = gym.make(args.env)
-    if args.submit:
-        monitor_log = os.path.join(args.output, 'monitor.log')
-        env = wrappers.Monitor(env, monitor_log)
-    # build model
-    num_actions = env.action_space.n
-    mem_size = 1000000
-    window = 4
-    input_shape = (84, 84)
-    if args.type == 'normal':
-        if args.netsize == 'small':
-            model = create_model_small(window, input_shape, num_actions)
-            target = create_model_small(window, input_shape, num_actions)
-        elif args.netsize == 'large':
-            model = create_model_large(window, input_shape, num_actions)
-            target = create_model_large(window, input_shape, num_actions)
-    memory = ReplayMemoryEfficient(mem_size, window, input_shape)
-    target_update_freq = 10000
-    num_burn_in = 1000
-    train_freq = 4
-    batch_size = 32
-    gamma = 0.99
-    epsilon = 0.05
-    learning_rate = 1e-4
-    updates_per_epoch = 50000
-    num_iterations = 50000000
-    num_episodes = 200
-    max_episode_length = 10000
-    with tf.device('/gpu:%d'%gpu_id):
-        config = tf.ConfigProto(intra_op_parallelism_threads=12)
-        config.gpu_options.allow_growth = True
-        sess = tf.Session(config=config)
-        # preprocessor
-        preprocessor = PreprocessorSequence()
-        # policy
-        policy = GreedyEpsilonPolicy(epsilon)
-        print policy
-        # build agent
-        dqn_agent = DQNAgent(model, target, preprocessor, memory, policy, gamma,
-                             target_update_freq, num_burn_in, train_freq,
-                             batch_size, num_actions, updates_per_epoch, args.output)
-        # load model
-        model_path = os.path.join(args.output, 'model_epoch%03d' % args.epoch)
-        dqn_agent.load_networks(model_path)
-        lengths, rewards = dqn_agent.evaluate(env, num_episodes, max_episode_length)
-
-        env.close()
-        if args.submit:
-            gym.upload(monitor_log, api_key='sk_wa5MgeDTnOQ209qBCP7jQ')
-        else:
-            log_file = open(os.path.join(args.output, 'evaluation.txt'), 'a+')
-            log_file.write('%d %f %f %f %f\n' % (args.epoch, np.mean(lengths), np.std(lengths), 
-                                                 np.mean(rewards), np.std(rewards)))
-            log_file.close()
-
-
-def main():  # noqa: D103
+def parse_input():  # noqa: D103
     parser = argparse.ArgumentParser(description='Run DQN on Atari Space Invaders')
     parser.add_argument('--gpu', default=0, type=int, help='Atari env name')
     parser.add_argument('--env', default='SpaceInvaders-v0', help='Atari env name')
@@ -313,11 +271,8 @@ def main():  # noqa: D103
     if not os.path.exists(args.output):
         os.makedirs(args.output)
 
-    if args.mode == 'train':
-        train(args)
-    elif args.mode == 'test':
-        test(args)
-
+    return args
 
 if __name__ == '__main__':
-    main()
+    args = parse_input()
+    main(args)
