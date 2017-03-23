@@ -57,10 +57,11 @@ class DQNAgent:
     """
 
     # TODO: remove num_actions - instead, derive from q_network
-    def __init__(self, q_source, q_target, preprocessor, memory, policy, gamma,
-                 target_update_freq, num_burn_in, train_freq, batch_size,
+    def __init__(self, type, q_source, q_target, preprocessor, memory, policy,
+                 gamma, target_update_freq, num_burn_in, train_freq, batch_size,
                  num_actions, updates_per_epoch, log_dir): 
 
+        self.type = type
         self.q_source = q_source
         self.q_target = q_target
         self.preprocessor = preprocessor
@@ -164,6 +165,15 @@ class DQNAgent:
 
         return action
 
+    def update(self):
+        if args.type == 'normal':
+            return self.update_policy()
+        elif args.type == 'double':
+            return self.update_policy_double()
+        elif args.type == 'duel':
+            raise Exception('Not implemented')
+        
+    
     def update_policy(self):
         """Update your policy.
 
@@ -273,11 +283,16 @@ class DQNAgent:
             for i in range(max_episode_length):
 
                 # select action
-                if a_last >= 0 and (i+1) % self.train_freq != 0:
-                    a_t = a_last
+                # if a_last >= 0 and (i+1) % self.train_freq != 0:
+                #     a_t = a_last
+                # else:
+                #     a_t = self.select_action(s_t)
+                #     print  i
+                if i % self.train_freq == 0:
+                    a_t = self.select_action(s_t, target=False)
                 else:
-                    a_t = self.select_action(s_t)
-                    print  i
+                    a_t = a_last
+                a_last = a_t
 
                 # simulate 
                 x_t1_colored, r_t, is_terminal, _ = env.step(a_t)  # any action
@@ -286,7 +301,7 @@ class DQNAgent:
                 acc_reward += r_t
 
                 # TODO: get rid of preprocessor (handle inside replay mem)
-                s_t1 = self.preprocessor.process_state_for_network(x_t1_colored)
+                s_t1 = self.preprocessor.process_state_for_network(x_t1_colored_fr)
 
                 # add more into replay memory
                 # self.memory.append(Sample(s_t, a_t, r_t, s_t1, is_terminal))
@@ -297,7 +312,8 @@ class DQNAgent:
                 
                 # sample minibatches from replay memory
                 if i % self.train_freq == 0 and self.memory.size() >= self.num_burn_in:
-                    loss = self.update_policy()
+                    # loss = self.update_policy()
+                    loss = self.update()
                     episode_loss[-1] += loss
                     num_updates += 1
                     
@@ -329,7 +345,7 @@ class DQNAgent:
             print st, ': episode %d, iterations %d, length %d(%d), num_updates %d, acc_reward %.2f(%.2f) , loss %.3f(%.3f)' % (
                 episode_num, self.iterations, episode_length[-1], np.mean(episode_length), num_updates, acc_reward, np.mean(episode_rewards), episode_loss[-1], np.mean(episode_loss))
             
-    def evaluate(self, env, num_episodes, max_episode_length=None):
+    def evaluate(self, env, eval_episodes, max_episode_length=None):
         """Test your agent with a provided environment.
         
         You shouldn't update your network parameters here. Also if you
@@ -359,18 +375,20 @@ class DQNAgent:
 
                 # select action
                 if i % self.train_freq == 0:
-                    a_t = self.select_action(s_t, False)
+                    a_t = self.select_action(s_t, target=False)
                 else:
                     a_t = a_last
                 a_last = a_t
 
                 # simulate 
                 x_t1_colored, r_t, is_terminal, _ = env.step(a_t)  # any action
+                x_t1_colored_fr = self.preprocessor.atari.remove_flickering(x_t, x_t1_colored)
                 acc_reward += r_t
 
                 # get new state
-                s_t1 = self.preprocessor.process_state_for_network(x_t1_colored)
+                s_t1 = self.preprocessor.process_state_for_network(x_t1_colored_fr)
                 s_t = s_t1    # was a bug
+                x_t = x_t1_colored
 
                 episode_lengths[-1] += 1
                 
@@ -378,6 +396,8 @@ class DQNAgent:
                     break
 
                 self.iterations += 1
+
+                # env.render()
                 
             episode_num += 1
             episode_rewards.append(acc_reward)
@@ -388,7 +408,7 @@ class DQNAgent:
                 episode_num, self.iterations, episode_lengths[-1], np.mean(episode_lengths),
                 acc_reward, np.mean(episode_rewards))
 
-            if episode_num == num_episodes:
+            if episode_num == eval_episodes:
                 break
 
         return episode_lengths, episode_rewards
