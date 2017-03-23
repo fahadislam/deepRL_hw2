@@ -35,7 +35,7 @@ class HistoryPreprocessor(Preprocessor):
         """You only want history when you're deciding the current action to take."""
         if self.count == 0:
             self.s_t = np.stack((state, state, state, state), axis=0)
-            self.s_t = self.s_t.reshape(1, self.s_t.shape[0], self.s_t.shape[1], self.s_t.shape[2]) 
+            self.s_t = self.s_t.reshape(1, self.s_t.shape[0], self.s_t.shape[1], self.s_t.shape[2])
         else:
             state = state.reshape(1, 1, state.shape[0], state.shape[1])
             self.s_t = np.append(state, self.s_t[:, :self.history_length, :, :], axis=1)
@@ -93,6 +93,9 @@ class AtariPreprocessor(Preprocessor):
 
     def __init__(self, new_size):
         self.new_size = new_size
+
+    def remove_flickering(self, x_t, x_t1):
+        return np.maximum(x_t, x_t1)
 
     def process_state_for_memory(self, state):
         """Scale, convert to greyscale and store as uint8.

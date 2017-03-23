@@ -11,6 +11,8 @@ from matplotlib import pyplot as plt
 
 from deeprl_hw2.core import Sample
 
+from keras.models import model_from_json
+
 # from deeprl_hw2.visual import flatten_state
 
 import pdb 
@@ -76,8 +78,12 @@ class DQNAgent:
         self.updates_per_epoch = updates_per_epoch
         self.reset_target_count = 0
 
-    # NOTE: currently integrated into create_model in dqn_atari.py
-    def compile(self, optimizer, loss_func):
+    def sync_networks(self):
+        for (layer_source, layer_target) in zip(self.q_source.layers, self.q_target.layers):
+            w = layer_source.get_weights()
+            layer_target.set_weights(w)
+
+    def compile_networks(self, optimizer, loss_func):
         """Setup all of the TF graph variables/ops.
 
         This is inspired by the compile method on the
@@ -96,11 +102,14 @@ class DQNAgent:
         """
         self.q_source.compile(loss=loss_func, optimizer=optimizer)
         self.q_target.compile(loss=loss_func, optimizer=optimizer)
+        self.sync_networks()
 
-        for (layer_source, layer_target) in zip(self.q_source.layers, self.q_target.layers):
-            w = layer_source.get_weights()
-            layer_target.set_weights(w)
-
+    def load_networks(self, model_path):
+        # print(model_path + '.json')
+        # self.q_source = model_from_json(model_path + '.json')
+        self.q_source.load_weights(model_path + '.h5')
+        self.sync_networks()
+            
     def calc_q_values(self, state, target):
         """Given a state (or batch of states) calculate the Q-values.
 
@@ -115,7 +124,7 @@ class DQNAgent:
         else:
             return self.q_source.predict(state)
 
-    def select_action(self, state, **kwargs):
+    def select_action(self, state, train=True):
         """Select the action based on the current state.
 
         You will probably want to vary your behavior here based on
@@ -137,20 +146,21 @@ class DQNAgent:
         selected action
         """
 
-        if self.memory.size() < self.num_burn_in:
-            action = np.random.randint(0, self.num_actions)
-        else:
-            if random.random() <= self.policy.epsilon:
+        if train:
+            if self.memory.size() < self.num_burn_in:
                 action = np.random.randint(0, self.num_actions)
             else:
-                # print 'Computing q values'
-                q_values = self.calc_q_values(state, False)
-                action = np.argmax(q_values)
-            if self.policy.epsilon > self.policy.end_value:
-                self.policy.epsilon -= self.policy.step
-        # else:
-        #     self.policy = GreedyEpsilonPolicy(epsilon)
-        #     action = policy.select_action(q_values)
+                if random.random() <= self.policy.epsilon:
+                    action = np.random.randint(0, self.num_actions)
+                else:
+                    # print 'Computing q values'
+                    q_values = self.calc_q_values(state, False)
+                    action = np.argmax(q_values)
+                if self.policy.epsilon > self.policy.end_value:
+                    self.policy.epsilon -= self.policy.step
+        else:  # for testing
+            q_values = self.calc_q_values(state, False)
+            action = self.policy.select_action(q_values)
 
         return action
 
@@ -204,20 +214,11 @@ class DQNAgent:
             else:
                 targets[i, action_t] = reward_t + self.gamma * np.max(Q_hat[i])
 
-        # NOTE: fix training examples and targets to make sure loss is going down
-
+        # occasionally update the target network
         self.reset_target_count += 1
         if self.reset_target_count == self.target_update_freq:
-            self.reset_target_count = 0;
-            # weights_target = []
-            # for layer in self.q_source.layers:
-            for (layer_source, layer_target) in zip(self.q_source.layers, self.q_target.layers):
-                # print("LAYER SOURCE")
-                # print(layer_source.get_weights())   
-                # print("LAYER TARGET")
-                # print(layer_target.get_weights())
-                w = layer_source.get_weights()
-                layer_target.set_weights(w)
+            self.reset_target_count = 0
+            self.sync_networks()
         
         # for i in range(10):
         loss = self.q_source.train_on_batch(state_ts, targets)
@@ -279,6 +280,8 @@ class DQNAgent:
 
                 # simulate 
                 x_t1_colored, r_t, is_terminal, _ = env.step(a_t)  # any action
+                x_t1_colored = self.preprocessor.atari.remove_flickering(x_t, x_t1_colored)
+                
                 acc_reward += r_t
 
                 # TODO: get rid of preprocessor (handle inside replay mem)
@@ -336,4 +339,52 @@ class DQNAgent:
         You can also call the render function here if you want to
         visually inspect your policy.
         """
-        pass
+
+        episode_num = 0
+        episode_rewards = []
+        episode_lengths = []
+
+        while True:
+            episode_lengths.append(0)
+            acc_reward = 0
+
+            x_t = env.reset()
+
+            s_t = self.preprocessor.process_state_for_network(x_t)
+            a_last = -1
+            for i in range(max_episode_length):
+
+                # select action
+                if a_last >= 0 and (i+1) % self.train_freq != 0:
+                    a_t = a_last
+                else:
+                    a_t = self.select_action(s_t, False)
+
+                # simulate 
+                x_t1_colored, r_t, is_terminal, _ = env.step(a_t)  # any action
+                acc_reward += r_t
+
+                # get new state
+                s_t1 = self.preprocessor.process_state_for_network(x_t1_colored)
+                s_t = s_t1    # was a bug
+
+                episode_lengths[-1] += 1
+                
+                if is_terminal:
+                    break
+
+                self.iterations += 1
+                
+            episode_num += 1
+            episode_rewards.append(acc_reward)
+
+            ts = time.time()
+            st = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
+            print st, ': episode %d, iterations %d, length %d(%d), acc_reward %.2f(%.2f)' % (
+                episode_num, self.iterations, episode_lengths[-1], np.mean(episode_lengths),
+                acc_reward, np.mean(episode_rewards))
+
+            if episode_num == num_episodes:
+                break
+
+        return episode_lengths, episode_rewards
