@@ -324,8 +324,10 @@ class DQNAgent:
                 #     a_t = self.select_action(s_t)
                 #     print  i
                 if i % self.train_freq == 0:
+                    # print(i, "Computing new actions")
                     a_t = self.select_action(s_t, train=True)
                 else:
+                    # print(i, "Copying old actions")
                     a_t = a_last
                 a_last = a_t
 

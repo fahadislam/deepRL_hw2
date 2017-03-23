@@ -210,7 +210,6 @@ def main(args):
     batch_size = 32
     gamma = 0.99
     epsilon = 0.05
-    learning_rate = 1e-4
     updates_per_epoch = 50000
     num_iterations = 50000000
     eval_episodes = 200
@@ -232,8 +231,9 @@ def main(args):
                              batch_size, num_actions, updates_per_epoch,
                              args.output)
         if args.mode == 'train': # compile net and train with fit
-            rmsprop = RMSprop(lr=learning_rate)
-            dqn_agent.compile_networks(rmsprop, mean_huber_loss)
+            # rmsprop = RMSprop(lr=learning_rate)
+            # dqn_agent.compile_networks(rmsprop, mean_huber_loss)
+            adam = Adam(lr=0.00025, beta_1=0.95, beta_2=0.95, epsilon=0.1)
             dqn_agent.fit(env, num_iterations, max_episode_length)
         elif args.mode == 'test': # load net and evaluate
             model_path = os.path.join(args.output, 'model_epoch%03d' % args.epoch)
