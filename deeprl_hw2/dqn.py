@@ -17,6 +17,7 @@ from keras.models import model_from_json
 
 import pdb 
 
+
 class DQNAgent:
     """Class implementing DQN.
 
@@ -166,14 +167,13 @@ class DQNAgent:
         return action
 
     def update(self):
-        if args.type == 'normal':
+        if self.type == 'normal':
             return self.update_policy()
-        elif args.type == 'double':
+        elif self.type == 'double':
             return self.update_policy_double()
-        elif args.type == 'duel':
+        elif self.type == 'duel':
             raise Exception('Not implemented')
         
-    
     def update_policy(self):
         """Update your policy.
 
@@ -189,8 +189,6 @@ class DQNAgent:
         You might want to return the loss and other metrics as an
         output. They can help you monitor how training is going.
         """
-
-        #print('Updating policy ... ') 
 
         minibatch = self.memory.sample(self.batch_size)
         # minibatch = self.preprocessor.atari.process_batch(minibatch)
@@ -233,6 +231,43 @@ class DQNAgent:
         # for i in range(10):
         loss = self.q_source.train_on_batch(state_ts, targets)
         # print 'Iteration: %d, Loss: %f' % (i, loss)
+
+        return loss
+
+    def update_policy_double(self):
+        # print 'updating policy using Double DQN'
+        
+        minibatch = self.memory.sample(self.batch_size)
+
+        state_shape = minibatch[0].state.shape
+        state_ts = np.zeros((self.batch_size, state_shape[1], state_shape[2], state_shape[3]))  # 32, 4, 84, 84
+        state_t1s = np.zeros((self.batch_size, state_shape[1], state_shape[2], state_shape[3]))  # 32, 4, 84, 84
+
+        for i in range(0, self.batch_size):
+            state_ts[i] = minibatch[i].state
+            state_t1s[i] = minibatch[i].next_state
+        
+        coin = random.random() > 0.5
+
+        targets = self.calc_q_values(state_ts, coin)
+        Q_s = self.calc_q_values(state_t1s, not coin)
+        Q_s_bar = self.calc_q_values(state_t1s, coin)
+        
+        for i in range(0, self.batch_size):
+            action_t = minibatch[i].action  
+            reward_t = minibatch[i].reward
+            terminal = minibatch[i].is_terminal
+            
+            if terminal:
+                targets[i, action_t] = reward_t
+            else:
+                a_max = np.argmax(Q_s[i])
+                targets[i, action_t] = reward_t + self.gamma * Q_s_bar[i, a_max]
+            
+        if coin:
+            loss = self.q_target.train_on_batch(state_ts, targets)
+        else:
+            loss = self.q_source.train_on_batch(state_ts, targets)
 
         return loss
 
@@ -289,7 +324,7 @@ class DQNAgent:
                 #     a_t = self.select_action(s_t)
                 #     print  i
                 if i % self.train_freq == 0:
-                    a_t = self.select_action(s_t, target=False)
+                    a_t = self.select_action(s_t, train=True)
                 else:
                     a_t = a_last
                 a_last = a_t
@@ -375,7 +410,7 @@ class DQNAgent:
 
                 # select action
                 if i % self.train_freq == 0:
-                    a_t = self.select_action(s_t, target=False)
+                    a_t = self.select_action(s_t, train=False)
                 else:
                     a_t = a_last
                 a_last = a_t
