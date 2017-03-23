@@ -230,12 +230,13 @@ def main(args):
                              gamma, target_update_freq, num_burn_in, train_freq,
                              batch_size, num_actions, updates_per_epoch,
                              args.output)
-        if args.mode == 'train': # compile net and train with fit
+        if args.mode == 'train':  # compile net and train with fit
             # rmsprop = RMSprop(lr=learning_rate)
             # dqn_agent.compile_networks(rmsprop, mean_huber_loss)
             adam = Adam(lr=0.00025, beta_1=0.95, beta_2=0.95, epsilon=0.1)
+            dqn_agent.compile_networks(adam, mean_huber_loss)
             dqn_agent.fit(env, num_iterations, max_episode_length)
-        elif args.mode == 'test': # load net and evaluate
+        elif args.mode == 'test':  # load net and evaluate
             model_path = os.path.join(args.output, 'model_epoch%03d' % args.epoch)
             dqn_agent.load_networks(model_path)
             lengths, rewards = dqn_agent.evaluate(env, eval_episodes, max_episode_length)
