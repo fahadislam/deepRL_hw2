@@ -177,24 +177,32 @@ class ReplayMemoryEfficient:
         
         self.frames = np.zeros((max_size, frame_size[0], frame_size[1]), dtype=np.uint8)
         self.actions = np.zeros(max_size, dtype=np.uint8)
-        self.rewards = np.zeros(max_size, dtype=np.float32)
+        self.rewards = np.zeros(max_size, dtype=np.int8)
         self.terminals = np.zeros(max_size, dtype=np.bool_)
 
     def size(self):
         if self.full:
             return self.max_size
         else:
-            return self.index+1
+            return self.index
         
     def check(self):
-        if self.index == self.max_size - 1:
+        if self.index == self.max_size:
             self.full = True
             self.index = 0
+
+    def clip_reward(self, reward):
+        if reward > 0:
+            return 1
+        elif reward < 0:
+            return -1
+        else:
+            return 0
 
     def append(self, state, action, reward):
         self.frames[self.index, :, :] = state[0][0]
         self.actions[self.index] = action
-        self.rewards[self.index] = reward
+        self.rewards[self.index] = self.clip_reward(reward)
         self.index += 1
         self.check()
         
@@ -205,6 +213,7 @@ class ReplayMemoryEfficient:
         self.check()
 
     def fetch_state(self, indices):
+        indices = indices[::-1]
         state = self.frames[indices].astype(np.float32)
         return state.reshape(1, state.shape[0], state.shape[1], state.shape[2])
 
@@ -220,6 +229,9 @@ class ReplayMemoryEfficient:
                 I[cnt] = i
                 cnt += 1
             if cnt == batch_size:
+                # for j in I:
+                #     if np.max(self.terminals[j-3:j+1]) != 0:
+                #         pdb.set_trace()
                 return I
     
     def sample(self, batch_size):

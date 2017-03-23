@@ -143,6 +143,7 @@ class LinearDecayGreedyEpsilonPolicy(Policy):
         self.step = (start_value - end_value) / num_steps
         self.epsilon = start_value
 
+    # NOTE: should not call
     def select_action(self, q_values, **kwargs):
         """Decay parameter and select action.
 
@@ -161,12 +162,11 @@ class LinearDecayGreedyEpsilonPolicy(Policy):
         # if random.random() <= self.epsilon:
         #     action = np.random.randint(0, q_values.shape[1])
         # else:
-        action = np.argmax(q_values)
-
-        if self.epsilon > self.end_value:
-            self.epsilon -= self.step
-
-        return action
+        print '!!!!!! calling a function that should not be called'
+        # action = np.argmax(q_values)
+        # if self.epsilon > self.end_value:
+        #     self.epsilon -= self.step
+        # return action
 
     def reset(self):
         """Start the decay over at the start value."""

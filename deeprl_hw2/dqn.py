@@ -7,9 +7,12 @@ import random
 import datetime
 import time
 
+import tensorflow as tf
+
 from matplotlib import pyplot as plt
 
 from deeprl_hw2.core import Sample
+from deeprl_hw2.objectives import mean_huber_loss
 
 from keras.models import model_from_json
 
@@ -59,7 +62,11 @@ class DQNAgent:
     # TODO: remove num_actions - instead, derive from q_network
     def __init__(self, q_source, q_target, preprocessor, memory, policy, gamma,
                  target_update_freq, num_burn_in, train_freq, batch_size,
-                 num_actions, updates_per_epoch, log_dir): 
+                 num_actions, updates_per_epoch, log_dir):
+
+        config = tf.ConfigProto(intra_op_parallelism_threads=12)
+        config.gpu_options.allow_growth = True
+        self.sess = tf.Session(config=config)
 
         self.q_source = q_source
         self.q_target = q_target
@@ -153,13 +160,12 @@ class DQNAgent:
                 if random.random() <= self.policy.epsilon:
                     action = np.random.randint(0, self.num_actions)
                 else:
-                    # print 'Computing q values'
                     q_values = self.calc_q_values(state, False)
                     action = np.argmax(q_values)
                 if self.policy.epsilon > self.policy.end_value:
                     self.policy.epsilon -= self.policy.step
         else:  # for testing
-            q_values = self.calc_q_values(state, False)
+            q_values = self.calc_q_values(state, target=False)
             action = self.policy.select_action(q_values)
 
         return action
@@ -183,36 +189,42 @@ class DQNAgent:
         #print('Updating policy ... ') 
 
         minibatch = self.memory.sample(self.batch_size)
+        
+        # for i in range(self.batch_size):
+        #     print 'reward:', minibatch[i].reward, ', action:', minibatch[i].action, ', terminal:', minibatch[i].is_terminal, ', dtype:', minibatch[i].state.dtype
+        #     if minibatch[i].reward > 0:
+        #         for j in range(4):
+        #             plt.subplot(2,4,j+1)
+        #             plt.imshow(minibatch[i].state[0,j,:,:,], cmap='gray')
+        #             plt.subplot(2,4,j+5)
+        #             plt.imshow(minibatch[i].next_state[0,j,:,:,], cmap='gray')
+        #         plt.show()
+
         # minibatch = self.preprocessor.atari.process_batch(minibatch)
 
         state_shape = minibatch[0].state.shape
         state_ts = np.zeros((self.batch_size, state_shape[1], state_shape[2], state_shape[3]))  # 32, 4, 84, 84
         state_t1s = np.zeros((self.batch_size, state_shape[1], state_shape[2], state_shape[3]))  # 32, 4, 84, 84
-        # targets = np.zeros((self.batch_size, self.num_actions))
 
         for i in range(0, self.batch_size):
             state_ts[i] = minibatch[i].state
             state_t1s[i] = minibatch[i].next_state
             
-        targets = self.calc_q_values(state_ts, False)
-        Q_hat = self.calc_q_values(state_t1s, True)
+        targets = self.calc_q_values(state_ts, target=False)
+        Q_hat = self.calc_q_values(state_t1s, target=True)
         
         for i in range(0, self.batch_size):
-            # state_t = minibatch[i].state
             action_t = minibatch[i].action  
             reward_t = minibatch[i].reward
-            # state_t1 = minibatch[i].next_state
             terminal = minibatch[i].is_terminal
 
-            #inputs[i:i + 1] = state_t
-            # inputs[i] = state_t 
-            # targets[i] = self.calc_q_values(state_t, False)  # Hitting each buttom probability
-            # Q_hat = self.calc_q_values(state_t1, True)
-
             if terminal:
-                targets[i, action_t] = reward_t
+                new_target = reward_t 
             else:
-                targets[i, action_t] = reward_t + self.gamma * np.max(Q_hat[i])
+                new_target = reward_t + self.gamma * np.max(Q_hat[i])
+            targets[i, action_t] = new_target
+
+        loss = self.q_source.train_on_batch(state_ts, targets)
 
         # occasionally update the target network
         self.reset_target_count += 1
@@ -220,10 +232,6 @@ class DQNAgent:
             self.reset_target_count = 0
             self.sync_networks()
         
-        # for i in range(10):
-        loss = self.q_source.train_on_batch(state_ts, targets)
-        # print 'Iteration: %d, Loss: %f' % (i, loss)
-
         return loss
 
     def fit(self, env, num_iterations, max_episode_length=None):
@@ -271,27 +279,28 @@ class DQNAgent:
             s_t = self.preprocessor.process_state_for_network(x_t)
             a_last = -1
             for i in range(max_episode_length):
-
                 # select action
-                if a_last >= 0 and (i+1) % self.train_freq != 0:
-                    a_t = a_last
+                if i % self.train_freq == 0:
+                    a_t = self.select_action(s_t, train=True)
                 else:
-                    a_t = self.select_action(s_t)
+                    a_t = a_last
+                a_last = a_t
 
                 # simulate 
                 x_t1_colored, r_t, is_terminal, _ = env.step(a_t)  # any action
-                x_t1_colored = self.preprocessor.atari.remove_flickering(x_t, x_t1_colored)
-                
+                x_t1_colored_fr = self.preprocessor.atari.remove_flickering(x_t, x_t1_colored)
                 acc_reward += r_t
 
                 # TODO: get rid of preprocessor (handle inside replay mem)
-                s_t1 = self.preprocessor.process_state_for_network(x_t1_colored)
+                s_t1 = self.preprocessor.process_state_for_network(x_t1_colored_fr)
 
                 # add more into replay memory
                 # self.memory.append(Sample(s_t, a_t, r_t, s_t1, is_terminal))
                 self.memory.append(s_t, a_t, r_t)
                 
                 s_t = s_t1    # was a bug
+                x_t = x_t1_colored
+                
                 # sample minibatches from replay memory
                 if i % self.train_freq == 0 and self.memory.size() >= self.num_burn_in:
                     loss = self.update_policy()
@@ -355,10 +364,11 @@ class DQNAgent:
             for i in range(max_episode_length):
 
                 # select action
-                if a_last >= 0 and (i+1) % self.train_freq != 0:
-                    a_t = a_last
+                if i % self.train_freq == 0:
+                    a_t = self.select_action(s_t, train=False)
                 else:
-                    a_t = self.select_action(s_t, False)
+                    a_t = a_last
+                a_last = a_t
 
                 # simulate 
                 x_t1_colored, r_t, is_terminal, _ = env.step(a_t)  # any action

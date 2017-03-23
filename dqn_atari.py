@@ -19,7 +19,6 @@ from keras.utils import plot_model
 
 import deeprl_hw2 as tfrl
 from deeprl_hw2.dqn import DQNAgent
-# from deeprl_hw2.dqn2 import DQNAgent
 from deeprl_hw2.objectives import mean_huber_loss
 from deeprl_hw2.core import ReplayMemory, ReplayMemoryEfficient
 from deeprl_hw2.policy import LinearDecayGreedyEpsilonPolicy, GreedyEpsilonPolicy
@@ -63,14 +62,20 @@ def create_model(window, input_shape, num_actions,
 
     print 'Now we start building the model ... '
     model = Sequential() 
-    model.add(Conv2D(16, kernel_size=(8,8), strides=(4,4), padding='same',
+    # model.add(Conv2D(16, kernel_size=(8,8), strides=(4,4), padding='same',
+    model.add(Conv2D(32, kernel_size=(8,8), strides=(4,4), padding='same',
                      kernel_initializer=initializers.RandomNormal(stddev=0.01),
                      activation='relu', input_shape=(window,input_rows,input_cols)))
-    model.add(Conv2D(32, kernel_size=(4,4), strides=(2,2), padding='same',
+    # model.add(Conv2D(32, kernel_size=(4,4), strides=(2,2), padding='same',
+    model.add(Conv2D(64, kernel_size=(4,4), strides=(2,2), padding='same',
+                     kernel_initializer=initializers.RandomNormal(stddev=0.01),
+                     activation='relu'))
+    model.add(Conv2D(64, kernel_size=(3,3), strides=(1,1), padding='same',
                      kernel_initializer=initializers.RandomNormal(stddev=0.01),
                      activation='relu'))
     model.add(Flatten())
-    model.add(Dense(256, activation='relu'))
+    # model.add(Dense(256, activation='relu'))
+    model.add(Dense(512, activation='relu'))
     model.add(Dense(num_actions, activation='linear')) 
 
     # plot the architecture of convnet 
@@ -148,11 +153,11 @@ def train(args):
     epsilon = 0.05
     learning_rate = 1e-4
     updates_per_epoch = 50000
-    num_iterations = 5000000
+    num_iterations = 50000000
     max_episode_length = 10000
     with tf.device('/gpu:%d'%gpu_id): 
         config = tf.ConfigProto(intra_op_parallelism_threads=12)
-        config.gpu_options.allow_growth = False
+        config.gpu_options.allow_growth = True
         sess = tf.Session(config=config)
         # preprocessor
         preprocessor = PreprocessorSequence()
@@ -195,7 +200,7 @@ def test(args):
     epsilon = 0.05
     learning_rate = 1e-4
     updates_per_epoch = 50000
-    num_iterations = 5000000
+    num_iterations = 50000000
     num_episodes = 200
     max_episode_length = 10000
     with tf.device('/gpu:%d'%gpu_id):
@@ -215,6 +220,8 @@ def test(args):
         model_path = os.path.join(args.output, 'model_epoch%03d' % args.epoch)
         dqn_agent.load_networks(model_path)
         lengths, rewards = dqn_agent.evaluate(env, num_episodes, max_episode_length)
+
+        env.close()
         if args.submit:
             gym.upload(monitor_log, api_key='sk_wa5MgeDTnOQ209qBCP7jQ')
         else:

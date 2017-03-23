@@ -3,8 +3,12 @@
 import numpy as np
 from PIL import Image
 
+from matplotlib import pyplot as plt
+
 from deeprl_hw2 import utils
 from deeprl_hw2.core import Preprocessor
+from deeprl_hw2.visual import flatten_state
+
 import skimage as skimage
 from skimage import transform, color, exposure
 import copy
@@ -41,6 +45,12 @@ class HistoryPreprocessor(Preprocessor):
             self.s_t = np.append(state, self.s_t[:, :self.history_length, :, :], axis=1)
 
         self.count += 1
+
+        # if self.count > 100:
+        #     for i in range(4):
+        #         plt.subplot(1,4,i+1)
+        #         plt.imshow(self.s_t[0,i,:,:], cmap='gray')
+        #     plt.show()
 
         return self.s_t
 
@@ -95,6 +105,15 @@ class AtariPreprocessor(Preprocessor):
         self.new_size = new_size
 
     def remove_flickering(self, x_t, x_t1):
+        
+        # plt.subplot(131)
+        # plt.imshow(x_t)
+        # plt.subplot(132)
+        # plt.imshow(x_t1)
+        # plt.subplot(133)
+        # plt.imshow(np.maximum(x_t, x_t1))
+        # plt.show()
+        
         return np.maximum(x_t, x_t1)
 
     def process_state_for_memory(self, state):
@@ -108,6 +127,9 @@ class AtariPreprocessor(Preprocessor):
         image conversions.
         """
 
+        # plt.subplot(121)
+        # plt.imshow(state)
+        
         state = Image.fromarray(state, 'RGB').convert('LA')
         # state.save('uncropped.png')
 
@@ -119,6 +141,11 @@ class AtariPreprocessor(Preprocessor):
         # state.save('resized.png')
         
         state = np.array(state.convert("L"))
+
+        # plt.subplot(122)
+        # plt.imshow(state, cmap='gray')
+        # plt.show()
+        
         return state
 
     def process_state_for_network(self, state):
@@ -144,14 +171,7 @@ class AtariPreprocessor(Preprocessor):
 
     def process_reward(self, reward):
         """Clip reward between -1 and 1."""
-        # NOTE: updated by peiyun, based on DQN paper 
-        if reward > 0:
-            reward = 1
-            #reward = min(1, reward)
-        else:
-            reward = -1
-            #reward = max(-1, reward)
-
+        # NOTE: handled inside replay memory in core.py
 
 class PreprocessorSequence(Preprocessor):
     """You may find it useful to stack multiple prepcrocesosrs (such as the History and the AtariPreprocessor).
