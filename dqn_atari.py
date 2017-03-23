@@ -205,8 +205,8 @@ def main(args):
     # memory = ReplayMemory(1000000, 100)  # window length is arbitrary
     memory = ReplayMemoryEfficient(mem_size, window, input_shape)
     target_update_freq = 10000
-    num_burn_in = 1000
-    train_freq = 4
+    num_burn_in = 50000
+    train_freq = 1
     batch_size = 32
     gamma = 0.99
     epsilon = 0.05
