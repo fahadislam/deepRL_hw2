@@ -338,7 +338,7 @@ class DQNAgent:
         num_updates = 0
         epoch = 1
         life_num = env.unwrapped.ale.lives()
-        is_terminal = False
+        is_terminal = True
 
         while True:
             acc_iter = 0
@@ -346,7 +346,6 @@ class DQNAgent:
             acc_reward = 0
 
             if is_terminal:
-                assert(life_num == 0)
                 x_t = env.reset()
                 life_num = env.unwrapped.ale.lives()
 
@@ -371,7 +370,10 @@ class DQNAgent:
                 # add more into replay memory
                 # self.memory.append(Sample(s_t, a_t, r_t, s_t1, is_terminal))
                 self.memory.append(s_t, a_t, r_t)
-                
+                if i == 0:
+                    for _ in xrange(self.memory.window_size-1):
+                        self.memory.append(s_t, a_t, r_t)
+                        
                 s_t = s_t1    # was a bug
                 x_t = x_t1_colored
                 
@@ -430,12 +432,16 @@ class DQNAgent:
         episode_num = 0
         episode_rewards = []
         episode_lengths = []
+        life_num = env.unwrapped.ale.lives()
+        is_terminal = True
 
         while True:
             episode_lengths.append(0)
             acc_reward = 0
 
-            x_t = env.reset()
+            if is_terminal:
+                x_t = env.reset()
+                life_num = env.unwrapped.ale.lives()
 
             s_t = self.preprocessor.process_state_for_network(x_t)
             a_last = -1
@@ -449,7 +455,7 @@ class DQNAgent:
                 a_last = a_t
 
                 # simulate 
-                x_t1_colored, r_t, is_terminal, _ = env.step(a_t)  # any action
+                x_t1_colored, r_t, is_terminal, debug_info = env.step(a_t)  # any action
                 x_t1_colored_fr = self.preprocessor.atari.remove_flickering(x_t, x_t1_colored)
                 acc_reward += r_t
 
@@ -460,7 +466,8 @@ class DQNAgent:
 
                 episode_lengths[-1] += 1
                 
-                if is_terminal:
+                if is_terminal or debug_info['ale.lives'] < life_num:
+                    life_num = debug_info['ale.lives']
                     break
 
                 self.iterations += 1
