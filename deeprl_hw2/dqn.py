@@ -167,13 +167,14 @@ class DQNAgent:
         return action
 
     def update(self):
-        if self.type == 'double':
-            if self.type == 'linear':
-                return self.update_policy_double_Q()
-            else:
-                return self.update_policy_double_DQN()
-        elif self.type in ['normal', 'duel', 'linear']:
+        if self.type == 'double-DQN':
+            return self.update_policy_double_DQN()
+        elif self.type == 'double-Q':
+            return self.update_policy_double_Q()
+        elif self.type in ['linear', 'linear-simple', 'normal', 'duel']:
             return self.update_policy()
+        else:
+            raise Exception('Type not supported for updating.')
         
     def update_policy(self):
         """Update your policy.
@@ -197,7 +198,6 @@ class DQNAgent:
         state_shape = minibatch[0].state.shape
         state_ts = np.zeros((self.batch_size, state_shape[1], state_shape[2], state_shape[3]))  # 32, 4, 84, 84
         state_t1s = np.zeros((self.batch_size, state_shape[1], state_shape[2], state_shape[3]))  # 32, 4, 84, 84
-        # targets = np.zeros((self.batch_size, self.num_actions))
 
         for i in range(0, self.batch_size):
             state_ts[i] = minibatch[i].state
@@ -207,16 +207,9 @@ class DQNAgent:
         Q_hat = self.calc_q_values(state_t1s, True)
         
         for i in range(0, self.batch_size):
-            # state_t = minibatch[i].state
             action_t = minibatch[i].action  
             reward_t = minibatch[i].reward
-            # state_t1 = minibatch[i].next_state
             terminal = minibatch[i].is_terminal
-
-            #inputs[i:i + 1] = state_t
-            # inputs[i] = state_t 
-            # targets[i] = self.calc_q_values(state_t, False)  # Hitting each buttom probability
-            # Q_hat = self.calc_q_values(state_t1, True)
 
             if terminal:
                 targets[i, action_t] = reward_t
@@ -280,7 +273,7 @@ class DQNAgent:
 
         state_shape = minibatch[0].state.shape
         state_ts = np.zeros((self.batch_size, state_shape[1], state_shape[2], state_shape[3]))  # 32, 4, 84, 84
-        statpe_t1s = np.zeros((self.batch_size, state_shape[1], state_shape[2], state_shape[3]))  # 32, 4, 84, 84
+        state_t1s = np.zeros((self.batch_size, state_shape[1], state_shape[2], state_shape[3]))  # 32, 4, 84, 84
 
         for i in range(0, self.batch_size):
             state_ts[i] = minibatch[i].state
@@ -399,7 +392,7 @@ class DQNAgent:
                     break
                 
                 self.iterations += 1
-                acc_len += 1
+                acc_iter += 1
                 
                 if num_updates > epoch * self.updates_per_epoch:
                     print('Saving model at epoch %d ... ' % epoch)
@@ -416,13 +409,12 @@ class DQNAgent:
             
             if self.memory.size() >= self.num_burn_in:
                 episode_rewards.append(acc_reward)
-                episode_length.append(acc_len)
+                episode_length.append(acc_iter)
                 episode_loss.append(acc_loss)
-
-            ts = time.time()
-            st = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
-            print st, ': episode %d, iterations %d, length %d(%d), num_updates %d, acc_reward %.2f(%.2f) , loss %.3f(%.3f)' % (
-                episode_num, self.iterations, episode_length[-1], np.mean(episode_length), num_updates, acc_reward, np.mean(episode_rewards), episode_loss[-1], np.mean(episode_loss))
+                ts = time.time()
+                st = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
+                print st, ': episode %d, iterations %d, length %d(%d), num_updates %d, acc_reward %.2f(%.2f) , loss %.3f(%.3f)' % (
+                    episode_num, self.iterations, episode_length[-1], np.mean(episode_length), num_updates, acc_reward, np.mean(episode_rewards), episode_loss[-1], np.mean(episode_loss))
 
             
     def evaluate(self, env, eval_episodes, max_episode_length=None):

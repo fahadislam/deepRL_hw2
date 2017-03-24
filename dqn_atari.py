@@ -11,11 +11,14 @@ from gym import wrappers
 
 import keras
 from keras import initializers 
-from keras.models import Sequential
+from keras.models import Sequential, Model
 from keras.layers import Dense, Flatten
+from keras.layers import Lambda, Input
+from keras.layers.merge import Add
 from keras.layers import Conv2D
 from keras.optimizers import Adam, RMSprop
 from keras.utils import plot_model
+from keras import backend as K
 
 import deeprl_hw2 as tfrl
 from deeprl_hw2.dqn import DQNAgent
@@ -26,18 +29,19 @@ from deeprl_hw2.preprocessors import PreprocessorSequence
 
 import pdb
 
-def create_model_linear(window, input_shape, num_actions, model_name):
+
+def create_model_linear(window, input_shape, num_actions, model_name='q_network'):
 
     model = Sequential() 
 
-    model.add(Flatten())
-    model.add(Dense(num_actions, input_shape(window*input_shape[0]*input_shape[1], )))
+    input_rows, input_cols = input_shape[0], input_shape[1]
+    model.add(Flatten(input_shape=(window,input_rows,input_cols)))
+    model.add(Dense(num_actions, kernel_initializer=initializers.RandomNormal(mean=0.0, stddev=0.001, seed=None)))
 
     return model
 
 
-def create_model_duel(window, input_shape, num_actions,
-                      model_name='q_network'):  # noqa: D103
+def create_model_duel(window, input_shape, num_actions, model_name='q_network'):  # noqa: D103
     print("Built a dueling sequential DQN")
 
     input_rows, input_cols = input_shape[0], input_shape[1]
@@ -59,42 +63,14 @@ def create_model_duel(window, input_shape, num_actions,
     a_2 = Dense(num_actions)(a_1)
     a_out = Lambda(lambda a: a[:, :] - K.mean(a[:, :], keepdims=True), output_shape=(num_actions,))(a_2)
 
-    q_out = keras.layers.merge([v_out, a_out], mode='add')
+    # q_out = keras.layers.merge([v_out, a_out], mode='add')
+    q_out = Add()([v_out, a_out])
     model = Model(inputs=input, outputs=q_out)
 
     return model
 
 
-def create_model_small(window, input_shape, num_actions,
-                       model_name='q_network'):  # noqa: D103
-    """Create the Q-network model.
-
-    Use Keras to construct a keras.models.Model instance (you can also
-    use the SequentialModel class).
-
-    We highly recommend that you use tf.name_scope as discussed in
-    class when creating the model and the layers. This will make it
-    far easier to understnad your network architecture if you are
-    logging with tensorboard.
-
-    Parameters
-    ----------
-    window: int
-      Each input to the network is a sequence of frames. This value
-      defines how many frames are in the sequence.
-    input_shape: tuple(int, int)
-      The expected input image size.
-    num_actions: int
-      Number of possible actions. Defined by the gym environment.
-    model_name: str
-      Useful when debugging. Makes the model show up nicer in tensorboard.
-
-    Returns
-    -------
-    keras.models.Model
-      The Q-model.
-    """
-    # Remember you messed up with the initializations
+def create_model(window, input_shape, num_actions, model_name='q_network'):  # noqa: D103
 
     input_rows, input_cols = input_shape[0], input_shape[1]
 
@@ -107,19 +83,16 @@ def create_model_small(window, input_shape, num_actions,
                      kernel_initializer=initializers.he_normal(),
                      activation='relu'))
     model.add(Flatten())
-    model.add(Dense(256, activation='relu', kernel_initializer=he_normal()))
+    model.add(Dense(256, activation='relu', kernel_initializer=initializers.he_normal()))
     model.add(Dense(num_actions, activation='linear')) 
-
-    # plot the architecture of convnet 
-    # plot_model(model, to_file='convnet.png')
 
     return model
 
 
 def main(args):
     # gpu id
-    gpu_id = args.gpu
-    os.environ['CUDA_VISIBLE_DEVICES'] = '%d'%gpu_id
+    # gpu_id = args.gpu
+    # os.environ['CUDA_VISIBLE_DEVICES'] = '%d'%gpu_id
     # make env 
     env = gym.make(args.env)
     if args.mode == 'test' and args.submit:
@@ -132,13 +105,9 @@ def main(args):
     window = 4
     input_shape = (84, 84)
     if args.type in ['normal', 'double-DQN']:
-        if args.netsize == 'small':
-            model = create_model_small(window, input_shape, num_actions)
-            target = create_model_small(window, input_shape, num_actions)
-        elif args.netsize == 'large':
-            model = create_model_large(window, input_shape, num_actions)
-            target = create_model_large(window, input_shape, num_actions)
-    elif args.type in ['linear', 'double-Q']
+        model = create_model(window, input_shape, num_actions)
+        target = create_model(window, input_shape, num_actions)
+    elif args.type in ['linear', 'linear-simple', 'double-Q']:
         model = create_model_linear(window, input_shape, num_actions)
         target = create_model_linear(window, input_shape, num_actions)
     elif args.type == 'duel':
@@ -156,50 +125,51 @@ def main(args):
     eval_episodes = 200
     max_episode_length = 10000
 
-    # no experience replay nor target fixing 
-    if args.simple:  
-        mem_size = 1
+    # simple: no experience replay and no target fixing 
+    if args.type == 'linear-simple':  
+        mem_size = 5
         target_update_freq = 1
         num_burn_in = 0
         batch_size = 1
         
     memory = ReplayMemoryEfficient(mem_size, window, input_shape)
-    with tf.device('/gpu:%d'%gpu_id): 
-        config = tf.ConfigProto(intra_op_parallelism_threads=12)
-        config.gpu_options.allow_growth = True
-        sess = tf.Session(config=config)
-        # preprocessor
-        preprocessor = PreprocessorSequence()
-        # policy
-        if args.mode == 'train':
-            policy = LinearDecayGreedyEpsilonPolicy(1, 0.1, 1000000)
-        elif args.mode == 'test':
-            policy = GreedyEpsilonPolicy(epsilon)
-        # build agent
-        dqn_agent = DQNAgent(args.type, model, target, preprocessor, memory, policy,
-                             gamma, target_update_freq, num_burn_in, train_freq,
-                             batch_size, num_actions, updates_per_epoch,
-                             args.output)
-        if args.mode == 'train':  # compile net and train with fit
-            # rmsprop = RMSprop(lr=learning_rate)
-            # dqn_agent.compile_networks(rmsprop, mean_huber_loss)
-            adam = Adam(lr=0.00025, beta_1=0.95, beta_2=0.95, epsilon=0.1)
-            dqn_agent.compile_networks(adam, mean_huber_loss)
-            dqn_agent.fit(env, num_iterations, max_episode_length)
-        elif args.mode == 'test':  # load net and evaluate
-            model_path = os.path.join(args.output, 'model_epoch%03d' % args.epoch)
-            dqn_agent.load_networks(model_path)
-            lengths, rewards = dqn_agent.evaluate(env, eval_episodes, max_episode_length)
-            if args.submit:
-                gym.upload(monitor_log, api_key='sk_wa5MgeDTnOQ209qBCP7jQ')
-            else:
-                log_file = open(os.path.join(args.output, 'evaluation.txt'), 'a+')
-                log_file.write('%d %f %f %f %f\n' % (args.epoch,
-                                                     np.mean(lengths),
-                                                     np.std(lengths),
-                                                     np.mean(rewards),
-                                                     np.std(rewards)))
-                log_file.close()
+    # with tf.device('/gpu:%d'%gpu_id):
+    
+    config = tf.ConfigProto(intra_op_parallelism_threads=12)
+    config.gpu_options.allow_growth = True
+    sess = tf.Session(config=config)
+    # preprocessor
+    preprocessor = PreprocessorSequence()
+    # policy
+    if args.mode == 'train':
+        policy = LinearDecayGreedyEpsilonPolicy(1, 0.1, 1000000)
+    elif args.mode == 'test':
+        policy = GreedyEpsilonPolicy(epsilon)
+    # build agent
+    dqn_agent = DQNAgent(args.type, model, target, preprocessor, memory, policy,
+                         gamma, target_update_freq, num_burn_in, train_freq,
+                         batch_size, num_actions, updates_per_epoch,
+                         args.output)
+    if args.mode == 'train':  # compile net and train with fit
+        # rmsprop = RMSprop(lr=learning_rate)
+        # dqn_agent.compile_networks(rmsprop, mean_huber_loss)
+        adam = Adam(lr=0.00025, beta_1=0.95, beta_2=0.95, epsilon=0.1)
+        dqn_agent.compile_networks(adam, mean_huber_loss)
+        dqn_agent.fit(env, num_iterations, max_episode_length)
+    elif args.mode == 'test':  # load net and evaluate
+        model_path = os.path.join(args.output, 'model_epoch%03d' % args.epoch)
+        dqn_agent.load_networks(model_path)
+        lengths, rewards = dqn_agent.evaluate(env, eval_episodes, max_episode_length)
+        if args.submit:
+            gym.upload(monitor_log, api_key='sk_wa5MgeDTnOQ209qBCP7jQ')
+        else:
+            log_file = open(os.path.join(args.output, 'evaluation.txt'), 'a+')
+            log_file.write('%d %f %f %f %f\n' % (args.epoch,
+                                                 np.mean(lengths),
+                                                 np.std(lengths),
+                                                 np.mean(rewards),
+                                                 np.std(rewards)))
+            log_file.close()
     env.close()
 
 
@@ -207,10 +177,8 @@ def parse_input():  # noqa: D103
     parser = argparse.ArgumentParser(description='Run DQN on Atari Space Invaders')
     parser.add_argument('--gpu', default=0, type=int, help='Atari env name')
     parser.add_argument('--env', default='SpaceInvaders-v0', help='Atari env name')
-    parser.add_argument('--type', default='normal', type=str, help='normal|double-DQN|duel|linear|double-Q')
-    parser.add_argument('--simple', default=False, type=bool, help='True|False')
+    parser.add_argument('--type', default='normal', type=str, help='normal|double-DQN|double-Q|duel|linear|linear-simple')
     parser.add_argument('--mode', default='train', help='train|test')
-    parser.add_argument('--netsize', default='small', type=str, help='small|large')
     # parser.add_argument('--run', default=0, type=int, help='run index')
     parser.add_argument('--submit', default=False, type=bool, help='epoch (for test)')
     parser.add_argument('--epoch', default=0, type=int, help='epoch (for test)')
@@ -218,11 +186,12 @@ def parse_input():  # noqa: D103
     parser.add_argument('--seed', default=0, type=int, help='Random seed')
 
     args = parser.parse_args()
-    args.output = os.path.join(args.output, '%s-%s-%s'%(args.env, args.type, args.netsize))
+    args.output = os.path.join(args.output, '%s-%s'%(args.env, args.type))
     if not os.path.exists(args.output):
         os.makedirs(args.output)
 
     return args
+
 
 if __name__ == '__main__':
     args = parse_input()
