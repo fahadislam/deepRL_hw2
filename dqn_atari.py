@@ -251,7 +251,7 @@ def main(args):
     elif args.type == 'linear':
         model = create_model_linear(window, input_shape, num_actions)
         target = create_model_linear(window, input_shape, num_actions)
-    elif args.type = 'duel':
+    elif args.type == 'duel':
         model = create_model_duel(window, input_shape, num_actions)
         target = create_model_duel(window, input_shape, num_actions)
     # memory = ReplayMemory(1000000, 100)  # window length is arbitrary

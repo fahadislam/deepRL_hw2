@@ -346,8 +346,8 @@ class DQNAgent:
         epoch = 1
 
         while True:
-            episode_loss.append(0)
-            episode_length.append(0)
+            acc_iter = 0
+            acc_loss = 0
             acc_reward = 0
 
             x_t = env.reset()
@@ -355,7 +355,6 @@ class DQNAgent:
             s_t = self.preprocessor.process_state_for_network(x_t)
             a_last = -1
             for i in range(max_episode_length):
-
                 # select action
                 # if a_last >= 0 and (i+1) % self.train_freq != 0:
                 #     a_t = a_last
@@ -389,8 +388,7 @@ class DQNAgent:
                 # sample minibatches from replay memory
                 if i % self.train_freq == 0 and self.memory.size() >= self.num_burn_in:
                     # loss = self.update_policy()
-                    loss = self.update()
-                    episode_loss[-1] += loss
+                    acc_loss += self.update()
                     num_updates += 1
                     
                 if self.iterations == num_iterations:
@@ -401,7 +399,7 @@ class DQNAgent:
                     break
                 
                 self.iterations += 1
-                episode_length[-1] += 1
+                acc_len += 1
                 
                 if num_updates > epoch * self.updates_per_epoch:
                     print('Saving model at epoch %d ... ' % epoch)
@@ -415,7 +413,11 @@ class DQNAgent:
             self.memory.end_episode(s_t1, is_terminal)
             self.preprocessor.history.reset()
             episode_num += 1
-            episode_rewards.append(acc_reward)
+            
+            if self.memory.size() >= self.num_burn_in:
+                episode_rewards.append(acc_reward)
+                episode_length.append(acc_len)
+                episode_loss.append(acc_loss)
 
             ts = time.time()
             st = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
