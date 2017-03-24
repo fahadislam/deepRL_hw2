@@ -337,33 +337,30 @@ class DQNAgent:
         episode_length = []
         num_updates = 0
         epoch = 1
+        life_num = env.unwrapped.ale.lives()
+        is_terminal = False
 
         while True:
             acc_iter = 0
             acc_loss = 0
             acc_reward = 0
 
-            x_t = env.reset()
+            if is_terminal:
+                assert(life_num == 0)
+                x_t = env.reset()
+                life_num = env.unwrapped.ale.lives()
 
             s_t = self.preprocessor.process_state_for_network(x_t)
             a_last = -1
             for i in range(max_episode_length):
-                # select action
-                # if a_last >= 0 and (i+1) % self.train_freq != 0:
-                #     a_t = a_last
-                # else:
-                #     a_t = self.select_action(s_t)
-                #     print  i
                 if i % self.train_freq == 0:
-                    # print(i, "Computing new actions")
                     a_t = self.select_action(s_t, train=True)
                 else:
-                    # print(i, "Copying old actions")
                     a_t = a_last
                 a_last = a_t
 
                 # simulate 
-                x_t1_colored, r_t, is_terminal, _ = env.step(a_t)  # any action
+                x_t1_colored, r_t, is_terminal, debug_info = env.step(a_t)  # any action
                 x_t1_colored_fr = self.preprocessor.atari.remove_flickering(x_t, x_t1_colored)
                 
                 acc_reward += r_t
@@ -380,7 +377,6 @@ class DQNAgent:
                 
                 # sample minibatches from replay memory
                 if i % self.train_freq == 0 and self.memory.size() >= self.num_burn_in:
-                    # loss = self.update_policy()
                     acc_loss += self.update()
                     num_updates += 1
                     
@@ -388,7 +384,8 @@ class DQNAgent:
                     print("We've reached the maximum number of iterations... ")
                     return
 
-                if is_terminal:
+                if is_terminal or debug_info['ale.lives'] < life_num:
+                    life_num = debug_info['ale.lives']
                     break
                 
                 self.iterations += 1
@@ -416,7 +413,6 @@ class DQNAgent:
                 print st, ': episode %d, iterations %d, length %d(%d), num_updates %d, acc_reward %.2f(%.2f) , loss %.3f(%.3f)' % (
                     episode_num, self.iterations, episode_length[-1], np.mean(episode_length), num_updates, acc_reward, np.mean(episode_rewards), episode_loss[-1], np.mean(episode_loss))
 
-            
     def evaluate(self, env, eval_episodes, max_episode_length=None):
         """Test your agent with a provided environment.
         

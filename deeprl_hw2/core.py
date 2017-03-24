@@ -206,7 +206,7 @@ class ReplayMemoryEfficient:
         self.index += 1
         self.check()
         
-    def end_episode(self, final_state, is_terminal):
+    def end_episode(self, final_state, is_terminal):  # is_terminal has no effect
         self.frames[self.index, :, :] = final_state[0][0]
         self.terminals[self.index] = True
         self.index += 1
