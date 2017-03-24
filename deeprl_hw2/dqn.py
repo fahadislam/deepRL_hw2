@@ -167,12 +167,10 @@ class DQNAgent:
         return action
 
     def update(self):
-        if self.type == 'normal':
+        if self.type in ['normal', 'duel', 'linear']:
             return self.update_policy()
         elif self.type == 'double':
             return self.update_policy_double()
-        elif self.type == 'duel':
-            raise Exception('Not implemented')
         
     def update_policy(self):
         """Update your policy.
@@ -381,6 +379,7 @@ class DQNAgent:
             st = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
             print st, ': episode %d, iterations %d, length %d(%d), num_updates %d, acc_reward %.2f(%.2f) , loss %.3f(%.3f)' % (
                 episode_num, self.iterations, episode_length[-1], np.mean(episode_length), num_updates, acc_reward, np.mean(episode_rewards), episode_loss[-1], np.mean(episode_loss))
+
             
     def evaluate(self, env, eval_episodes, max_episode_length=None):
         """Test your agent with a provided environment.

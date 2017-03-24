@@ -26,6 +26,52 @@ from deeprl_hw2.preprocessors import PreprocessorSequence
 
 import pdb
 
+def create_model_linear(window, input_shape, num_actions, model_name):
+
+    model = Sequential() 
+
+    model.add(Flatten())
+    model.add(Dense(num_actions, input_shape(window*input_shape[0]*input_shape[1], )))
+
+    return model
+
+
+def create_model_duel(window, input_shape, num_actions,
+                      model_name='q_network'):  # noqa: D103
+    print("Built a dueling sequential DQN")
+
+    input_rows, input_cols = input_shape[0], input_shape[1]
+
+    input = Input(shape=(window, input_rows, input_cols))
+
+    l_1 = Conv2D(32, kernel_size=(8,8), strides=(4,4), padding='same',
+                     kernel_initializer=initializers.RandomNormal(stddev=0.01),
+                     activation='relu', input_shape=(window,input_rows,input_cols))(input)
+
+    l_2 = Conv2D(64, kernel_size=(4,4), strides=(2,2), padding='same',
+                     kernel_initializer=initializers.RandomNormal(stddev=0.01),
+                     activation='relu')(l_1)
+    l_3 = Conv2D(64, kernel_size=(3,3), strides=(1,1), padding='same',
+                     kernel_initializer=initializers.RandomNormal(stddev=0.01),
+                     activation='relu')(l_2)
+
+    l_4 = Flatten()(l_3)
+
+    v_1 = Dense(256, activation='relu', kernel_initializer=initializer.RandomNormal(stdded=0.01))(l_4)
+    v_2 = Dense(1, kernel_initializer=initializer.RandomNormal(stdded=0.01))(v_1)
+    v_out = Lambda(lambda s: K.expand_dims(s[:, 0], axis=-1),
+                output_shape=(num_actions,))(v_2)
+     
+    a_1 = Dense(256, activation='relu', kernel_initializer=initializer.RandomNormal(stdded=0.01))(l_4)
+    a_2 = Dense(num_actions, kernel_initializer=initializer.RandomNormal(stdded=0.01))(a_1)
+    a_out = Lambda(lambda a: a[:, :] - K.mean(a[:, :], keepdims=True), 
+        output_shape=(num_actions,))(a_2)
+
+    # q_out = merge([v_out, a_out], mode='sum')
+    q_out = keras.layers.merge([v_out, a_out], mode='add')
+    model = Model(inputs=input, outputs=q_out)
+
+    return model
 
 def create_model_large(window, input_shape, num_actions,
                        model_name='q_network'):  # noqa: D103
@@ -202,8 +248,13 @@ def main(args):
         elif args.netsize == 'large':
             model = create_model_large(window, input_shape, num_actions)
             target = create_model_large(window, input_shape, num_actions)
+    elif args.type == 'linear':
+        model = create_model_linear(window, input_shape, num_actions)
+        target = create_model_linear(window, input_shape, num_actions)
+    elif args.type = 'duel':
+        model = create_model_duel(window, input_shape, num_actions)
+        target = create_model_duel(window, input_shape, num_actions)
     # memory = ReplayMemory(1000000, 100)  # window length is arbitrary
-    memory = ReplayMemoryEfficient(mem_size, window, input_shape)
     target_update_freq = 10000
     num_burn_in = 50000
     train_freq = 1
@@ -214,6 +265,15 @@ def main(args):
     num_iterations = 50000000
     eval_episodes = 200
     max_episode_length = 10000
+
+    # no experience replay nor target fixing 
+    if args.simple:  
+        mem_size = 1
+        target_update_freq = 1
+        num_burn_in = 0
+        batch_size = 1
+        
+    memory = ReplayMemoryEfficient(mem_size, window, input_shape)
     with tf.device('/gpu:%d'%gpu_id): 
         config = tf.ConfigProto(intra_op_parallelism_threads=12)
         config.gpu_options.allow_growth = True
@@ -257,7 +317,8 @@ def parse_input():  # noqa: D103
     parser = argparse.ArgumentParser(description='Run DQN on Atari Space Invaders')
     parser.add_argument('--gpu', default=0, type=int, help='Atari env name')
     parser.add_argument('--env', default='SpaceInvaders-v0', help='Atari env name')
-    parser.add_argument('--type', default='normal', type=str, help='normal|double|duel')
+    parser.add_argument('--type', default='normal', type=str, help='normal|double|duel|linear')
+    parser.add_argument('--simple', default=False, type=bool, help='True|False')
     parser.add_argument('--mode', default='train', help='train|test')
     parser.add_argument('--netsize', default='small', type=str, help='small|large')
     # parser.add_argument('--run', default=0, type=int, help='run index')
