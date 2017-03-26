@@ -101,14 +101,23 @@ def create_model(window, input_shape, num_actions, init_method, model_name='q_ne
                          activation='relu'))
         model.add(Flatten())
         model.add(Dense(256, activation='relu', kernel_initializer=initializers.he_normal()))
+        model.add(Dense(num_actions, activation='linear')) 
     elif init_method=='basic':
         model.add(Conv2D(16, kernel_size=(8,8), strides=(4,4), padding='same',
                          activation='relu', input_shape=(window,input_rows,input_cols)))
         model.add(Conv2D(32, kernel_size=(4,4), strides=(2,2), padding='same', activation='relu'))
         model.add(Flatten())
         model.add(Dense(256, activation='relu'))
-    
-    model.add(Dense(num_actions, activation='linear')) 
+        model.add(Dense(num_actions, activation='linear')) 
+    elif init_method=='normal':
+        model.add(Conv2D(16, kernel_size=(8,8), strides=(4,4), padding='same',
+                         kernel_initializer=initializers.truncated_normal(stddev=0.02),
+                         activation='relu', input_shape=(window,input_rows,input_cols)))
+        model.add(Conv2D(32, kernel_size=(4,4), strides=(2,2), padding='same', activation='relu',
+                         kernel_initializer=initializers.truncated_normal(stddev=0.02)))
+        model.add(Flatten())
+        model.add(Dense(256, kernel_initializer=initializers.random_normal(stddev=0.02), activation='relu'))
+        model.add(Dense(num_actions, kernel_initializer=initializers.random_normal(stddev=0.02), activation='linear'))
     return model
 
 
