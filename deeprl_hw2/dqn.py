@@ -360,8 +360,11 @@ class DQNAgent:
 
                 # simulate 
                 x_t1_colored, r_t, is_terminal, debug_info = env.step(a_t)  # any action
-                x_t1_colored_fr = self.preprocessor.atari.remove_flickering(x_t, x_t1_colored)
-                
+                if env.env.spec.id.startswith('SpaceInvaders'):
+                    x_t1_colored_fr = self.preprocessor.atari.remove_flickering(x_t, x_t1_colored)
+                else:
+                    x_t1_colored_fr = x_t1_colored
+                    
                 acc_reward += r_t
 
                 # TODO: get rid of preprocessor (handle inside replay mem)
