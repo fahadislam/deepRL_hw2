@@ -136,7 +136,7 @@ def main(args):
     mem_size = 1000000
     window = 4
     input_shape = (84, 84)
-    if args.type in ['normal', 'double-DQN']:
+    if args.type in ['DQN', 'double-DQN']:
         model = create_model(window, input_shape, num_actions, args.init)
         target = create_model(window, input_shape, num_actions, args.init)
     elif args.type in ['linear', 'linear-simple', 'double-Q']:
@@ -148,7 +148,7 @@ def main(args):
     # memory = ReplayMemory(1000000, 100)  # window length is arbitrary
     target_update_freq = 10000
     num_burn_in = 50000
-    train_freq = 1
+    train_freq = 4
     batch_size = 32
     gamma = 0.99
     epsilon = 0.05
@@ -167,7 +167,7 @@ def main(args):
     memory = ReplayMemoryEfficient(mem_size, window, input_shape)
     # with tf.device('/gpu:%d'%gpu_id):
     
-    config = tf.ConfigProto(intra_op_parallelism_threads=12)
+    config = tf.ConfigProto(intra_op_parallelism_threads=8)
     config.gpu_options.allow_growth = True
     sess = tf.Session(config=config)
     # preprocessor
@@ -183,10 +183,10 @@ def main(args):
                          batch_size, num_actions, updates_per_epoch,
                          args.output)
     if args.mode == 'train':  # compile net and train with fit
-        # rmsprop = RMSprop(lr=learning_rate)
-        # dqn_agent.compile_networks(rmsprop, mean_huber_loss)
-        adam = Adam(lr=0.00025, beta_1=0.95, beta_2=0.95, epsilon=0.1)
-        dqn_agent.compile_networks(adam, mean_huber_loss)
+        rmsprop = RMSprop(lr=0.00025, rho=0.95, epsilon=0.01)
+        dqn_agent.compile_networks(rmsprop, mean_huber_loss)
+        # adam = Adam(lr=0.00025, beta_1=0.95, beta_2=0.95, epsilon=0.1)
+        # dqn_agent.compile_networks(adam, mean_huber_loss)
         dqn_agent.fit(env, num_iterations, max_episode_length)
     elif args.mode == 'test':  # load net and evaluate
         model_path = os.path.join(args.output, 'model_epoch%03d' % args.epoch)
@@ -208,8 +208,8 @@ def main(args):
 def parse_input():  # noqa: D103
     parser = argparse.ArgumentParser(description='Run DQN on Atari Space Invaders')
     parser.add_argument('--gpu', default=0, type=int, help='Atari env name')
-    parser.add_argument('--env', default='SpaceInvaders-v0', help='Atari env name')
-    parser.add_argument('--type', default='normal', type=str, help='normal|double-DQN|double-Q|duel|linear|linear-simple')
+    parser.add_argument('--env', default='Breakout-v0', help='Atari env name')
+    parser.add_argument('--type', default='DQN', type=str, help='DQN|double-DQN|double-Q|duel|linear|linear-simple')
     parser.add_argument('--mode', default='train', help='train|test')
     # parser.add_argument('--run', default=0, type=int, help='run index')
     parser.add_argument('--submit', default=False, type=bool, help='epoch (for test)')
@@ -217,15 +217,15 @@ def parse_input():  # noqa: D103
     parser.add_argument('-o', '--output', default='cache', help='Directory to save data to')
     parser.add_argument('--tag', default='', type=str, help='extra tag')
     parser.add_argument('--seed', default=0, type=int, help='Random seed')
-    parser.add_argument('--init', default='special', type=str, help='special|basic')
+    parser.add_argument('--init', default='normal', type=str, help='normal|special|basic')
 
     args = parser.parse_args()
     args.output = os.path.join(args.output, '%s-%s'%(args.env, args.type))
     if len(args.tag) > 0:
         args.output = '%s-%s' % (args.output, args.tag)
 
-    if args.init == 'basic':
-        args.output = '%s-%s' % (args.output, args.init)
+    # if args.init == 'basic':
+    args.output = '%s-%s' % (args.output, args.init)
 
     if not os.path.exists(args.output):
         os.makedirs(args.output)
