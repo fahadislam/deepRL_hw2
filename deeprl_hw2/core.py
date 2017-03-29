@@ -217,7 +217,7 @@ class ReplayMemoryEfficient:
 
     def fetch_state(self, indices):
         indices = indices[::-1]
-        state = self.frames[indices].astype(np.float32)
+        state = self.frames[indices].astype(np.float32)/255.0
         return state.reshape(1, state.shape[0], state.shape[1], state.shape[2])
 
     def draw(self, batch_size):
