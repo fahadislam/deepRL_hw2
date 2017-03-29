@@ -203,11 +203,14 @@ class ReplayMemoryEfficient:
         self.frames[self.index, :, :] = state[0][0]
         self.actions[self.index] = action
         self.rewards[self.index] = self.clip_reward(reward)
+        self.terminals[self.index] = False
         self.index += 1
         self.check()
         
-    def end_episode(self, final_state, is_terminal):  # is_terminal has no effect
-        self.frames[self.index, :, :] = final_state[0][0]
+    def end_episode(self, state, is_terminal):  # is_terminal has no effect
+        self.frames[self.index, :, :] = state[0][0]
+        self.actions[self.index] = 0
+        self.rewards[self.index] = 0
         self.terminals[self.index] = True
         self.index += 1
         self.check()
@@ -220,19 +223,20 @@ class ReplayMemoryEfficient:
     def draw(self, batch_size):
         cnt = 0
         I = -np.ones(batch_size,dtype=np.int)
-        while True:
+        while cnt < batch_size:
             if self.full:
                 i = np.random.randint(self.window_size-1, self.max_size-1)
+                # NOTE: don't sample around the current index
+                if self.index - 1 <= i and i <= self.index + 2:
+                    continue
             else:
                 i = np.random.randint(self.window_size-1, self.index)
-            if not np.any(self.terminals[i-(self.window_size-1):i+1]):
-                I[cnt] = i
-                cnt += 1
-            if cnt == batch_size:
-                # for j in I:
-                #     if np.max(self.terminals[j-3:j+1]) != 0:
-                #         pdb.set_trace()
-                return I
+            if np.any(self.terminals[i-(self.window_size-1):i+1]):
+                continue
+            I[cnt] = i
+            cnt += 1
+
+        return I
     
     def sample(self, batch_size):
         I = self.draw(batch_size)
