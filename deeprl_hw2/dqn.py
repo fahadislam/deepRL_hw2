@@ -13,10 +13,32 @@ from deeprl_hw2.core import Sample
 
 from keras.models import model_from_json
 
+import tensorflow as tf
+
 # from deeprl_hw2.visual import flatten_state
 
 import pdb 
 
+def build_summaries():
+    episode_reward = tf.Variable(0.)
+    tf.summary.scalar("Reward", episode_reward)
+    episode_ave_max_q = tf.Variable(0.)
+    tf.summary.scalar("Qmax Value", episode_ave_max_q)
+    episode_ave_loss = tf.Variable(0.)
+    tf.summary.scalar("Loss", episode_ave_loss)
+
+    summary_vars = [episode_reward, episode_ave_max_q, episode_ave_loss]
+    summary_placeholders = [tf.placeholder("float")
+                            for i in range(len(summary_vars))]
+
+    assign_ops = [summary_vars[i].assign(summary_placeholders[i])
+                  for i in range(len(summary_vars))]
+
+    summary_op = tf.summary.merge_all()
+
+    tf.global_variables_initializer().run()      
+
+    return summary_placeholders, assign_ops, summary_op
 
 class DQNAgent:
     """Class implementing DQN.
@@ -206,6 +228,9 @@ class DQNAgent:
         targets = self.calc_q_values(state_ts, False)
         Q_hat = self.calc_q_values(state_t1s, True)
         
+
+        avg_max_q = np.mean(np.max(targets, axis = 1))
+
         for i in range(0, self.batch_size):
             action_t = minibatch[i].action  
             reward_t = minibatch[i].reward
@@ -226,7 +251,7 @@ class DQNAgent:
         loss = self.q_source.train_on_batch(state_ts, targets)
         # print 'Iteration: %d, Loss: %f' % (i, loss)
 
-        return loss
+        return loss, avg_max_q
 
     def update_policy_double_DQN(self):
         # print 'updating policy using Double DQN'
@@ -331,8 +356,14 @@ class DQNAgent:
 
         # observation = env.render(mode='rgb_array')
         # history_preprocessor = HistoryPreprocessor()
+        sess = tf.InteractiveSession()
+        summary_writer = tf.summary.FileWriter("log_dir")
+        summary_placeholders, assign_ops, summary_op = build_summaries()
+
+
         episode_num = 0
         episode_rewards = []
+        episode_max_qvalues = []
         episode_loss = []
         episode_length = []
         num_updates = 0
@@ -344,6 +375,7 @@ class DQNAgent:
             acc_iter = 0
             acc_loss = 0
             acc_reward = 0
+            acc_qvalue = 0
 
             if is_terminal:
                 x_t = env.reset()
@@ -382,7 +414,10 @@ class DQNAgent:
                 
                 # sample minibatches from replay memory
                 if i % self.train_freq == 0 and self.memory.size() >= self.num_burn_in:
-                    acc_loss += self.update()
+                    # acc_loss += self.update()
+                    loss, max_avg_q = self.update()
+                    acc_loss += loss
+                    acc_qvalue += max_avg_q
                     num_updates += 1
                     
                 if self.iterations == num_iterations:
@@ -411,12 +446,21 @@ class DQNAgent:
             
             if self.memory.size() >= self.num_burn_in:
                 episode_rewards.append(acc_reward)
+                episode_max_qvalues.append(acc_qvalue)
                 episode_length.append(acc_iter)
                 episode_loss.append(acc_loss)
                 ts = time.time()
                 st = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
-                print st, ': episode %d, iterations %d, length %d(%d), num_updates %d, acc_reward %.2f(%.2f) , loss %.3f(%.3f)' % (
-                    episode_num, self.iterations, episode_length[-1], np.mean(episode_length), num_updates, acc_reward, np.mean(episode_rewards), episode_loss[-1], np.mean(episode_loss))
+                print st, ': episode %d, iterations %d, length %d(%d), num_updates %d, max_qvalue %.2f(%.2f), acc_reward %.2f(%.2f) , loss %.3f(%.3f)' % (
+                    episode_num, self.iterations, episode_length[-1], np.mean(episode_length), num_updates, acc_qvalue, np.mean(episode_max_qvalues), acc_reward, np.mean(episode_rewards), episode_loss[-1], np.mean(episode_loss))
+
+                stats = [acc_reward, np.mean(episode_max_qvalues), acc_loss]
+
+                for i in range(len(stats)):
+                # print stats[i]
+                    sess.run(assign_ops[i],{summary_placeholders[i]: float(stats[i])})
+                    summary_str = sess.run(summary_op)    
+                    summary_writer.add_summary(summary_str, self.iterations)
 
     def evaluate(self, env, eval_episodes, max_episode_length=None):
         """Test your agent with a provided environment.

@@ -111,13 +111,13 @@ def create_model(window, input_shape, num_actions, init_method, model_name='q_ne
         model.add(Dense(num_actions, activation='linear')) 
     elif init_method=='normal':
         model.add(Conv2D(16, kernel_size=(8,8), strides=(4,4), padding='same',
-                         kernel_initializer=initializers.truncated_normal(stddev=0.02),
+                         kernel_initializer=initializers.truncated_normal(stddev=0.01),
                          activation='relu', input_shape=(window,input_rows,input_cols)))
         model.add(Conv2D(32, kernel_size=(4,4), strides=(2,2), padding='same', activation='relu',
-                         kernel_initializer=initializers.truncated_normal(stddev=0.02)))
+                         kernel_initializer=initializers.truncated_normal(stddev=0.01)))
         model.add(Flatten())
-        model.add(Dense(256, kernel_initializer=initializers.random_normal(stddev=0.02), activation='relu'))
-        model.add(Dense(num_actions, kernel_initializer=initializers.random_normal(stddev=0.02), activation='linear'))
+        model.add(Dense(256, kernel_initializer=initializers.random_normal(stddev=0.01), activation='relu'))
+        model.add(Dense(num_actions, kernel_initializer=initializers.random_normal(stddev=0.01), activation='linear'))
     return model
 
 
@@ -147,7 +147,7 @@ def main(args):
         target = create_model_duel(window, input_shape, num_actions, args.init)
     # memory = ReplayMemory(1000000, 100)  # window length is arbitrary
     target_update_freq = 10000
-    num_burn_in = 50000
+    num_burn_in = 500
     train_freq = 4
     batch_size = 32
     gamma = 0.99
