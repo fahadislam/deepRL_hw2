@@ -4,6 +4,7 @@ import tensorflow as tf
 import semver
 import pdb 
 
+
 def huber_loss(y_true, y_pred, max_grad=1.):
     """Calculate the huber loss.
 
@@ -56,4 +57,4 @@ def mean_huber_loss(y_true, y_pred, max_grad=1.):
     print 'Calling mean_huber_loss ...'
     # pdb.set_trace()
     # return tf.reduce_mean(huber_loss(y_true, y_pred, max_grad), axis = -1)
-    return tf.reduce_mean(huber_loss(y_true, y_pred, max_grad), axis = 0)
+    return tf.reduce_mean(huber_loss(y_true, y_pred, max_grad), axis=0)

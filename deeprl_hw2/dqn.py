@@ -143,6 +143,8 @@ class DQNAgent:
         ------
         Q-values for the state(s)
         """
+        assert(state.dtype=='float32')
+        assert(np.max(state)>=0 and np.max(state)<=1)        
         if target:
             return self.q_target.predict(state)
         else:
@@ -177,7 +179,6 @@ class DQNAgent:
                 if random.random() <= self.policy.epsilon:
                     action = np.random.randint(0, self.num_actions)
                 else:
-                    # print 'Computing q values'
                     q_values = self.calc_q_values(state, False)
                     action = np.argmax(q_values)
                 if self.policy.epsilon > self.policy.end_value:
@@ -185,7 +186,6 @@ class DQNAgent:
         else:  # for testing
             q_values = self.calc_q_values(state, False)
             action = self.policy.select_action(q_values)
-
         return action
 
     def update(self):
@@ -215,25 +215,28 @@ class DQNAgent:
         """
 
         minibatch = self.memory.sample(self.batch_size)
-        # minibatch = self.preprocessor.atari.process_batch(minibatch)
+        minibatch = self.preprocessor.process_batch(minibatch)
 
+        # state_shape: 1 x 4 x 84 x 84
         state_shape = minibatch[0].state.shape
-        state_ts = np.zeros((self.batch_size, state_shape[1], state_shape[2], state_shape[3]))  # 32, 4, 84, 84
-        state_t1s = np.zeros((self.batch_size, state_shape[1], state_shape[2], state_shape[3]))  # 32, 4, 84, 84
+        # batch_shape: 32 x 4 x 84 x 84
+        batch_shape = (self.batch_size, state_shape[1], state_shape[2], state_shape[3])
+        state_ts = np.zeros(batch_shape, dtype=np.float32)
+        state_t1s = np.zeros(batch_shape, dtype=np.float32)
 
         for i in range(0, self.batch_size):
             state_ts[i] = minibatch[i].state
             state_t1s[i] = minibatch[i].next_state
-            
+
         targets = self.calc_q_values(state_ts, False)
         Q_hat = self.calc_q_values(state_t1s, True)
-        
 
-        avg_max_q = np.mean(np.max(targets, axis = 1))
+        avg_max_q = np.mean(np.max(targets, axis=1))
 
         for i in range(0, self.batch_size):
             action_t = minibatch[i].action  
             reward_t = minibatch[i].reward
+            assert(reward_t in [-1, 0, 1])
             terminal = minibatch[i].is_terminal
 
             if terminal:
@@ -246,13 +249,14 @@ class DQNAgent:
         if self.reset_target_count == self.target_update_freq:
             self.reset_target_count = 0
             self.sync_networks()
-        
-        # for i in range(10):
+
+        assert(state_ts.dtype=='float32')
+        assert(0 <= np.min(state_ts) and np.max(state_ts) <= 1)
         loss = self.q_source.train_on_batch(state_ts, targets)
-        # print 'Iteration: %d, Loss: %f' % (i, loss)
 
         return loss, avg_max_q
 
+    # TODO: double-check preprocessing steps
     def update_policy_double_DQN(self):
         # print 'updating policy using Double DQN'
         
@@ -291,6 +295,7 @@ class DQNAgent:
 
         return loss
 
+    # TODO: double-check preprocessing steps
     def update_policy_double_Q(self):
         # print 'updating policy using Double DQN'
         
@@ -357,9 +362,9 @@ class DQNAgent:
         # observation = env.render(mode='rgb_array')
         # history_preprocessor = HistoryPreprocessor()
         sess = tf.InteractiveSession()
+        
         summary_writer = tf.summary.FileWriter("log_dir")
         summary_placeholders, assign_ops, summary_op = build_summaries()
-
 
         episode_num = 0
         episode_rewards = []
@@ -380,41 +385,54 @@ class DQNAgent:
             if is_terminal:
                 x_t = env.reset()
                 life_num = env.unwrapped.ale.lives()
-
-            s_t = self.preprocessor.process_state_for_network(x_t)
+                
+            # s_t = self.preprocessor.process_state_for_network(x_t)
             a_last = -1
             for i in range(max_episode_length):
+                # preprocess the current frame:
+                # 1. resize/crop, grayscale, convert to float32,
+                # 2. normalize from 255 to 1
+                # 3. stack with previous preprocessed frames
+                # 4. remove flickering (if needed)
+                s_t = self.preprocessor.process_state_for_network(x_t)
                 if i % self.train_freq == 0:
                     a_t = self.select_action(s_t, train=True)
                 else:
                     a_t = a_last
                 a_last = a_t
 
-                # simulate 
-                x_t1_colored, r_t, is_terminal, debug_info = env.step(a_t)  # any action
-                if env.env.spec.id.startswith('SpaceInvaders'):
-                    x_t1_colored_fr = self.preprocessor.atari.remove_flickering(x_t, x_t1_colored)
-                else:
-                    x_t1_colored_fr = x_t1_colored
-                    
+                # execute action
+                x_t1, r_t, is_terminal, debug_info = env.step(a_t)  
                 acc_reward += r_t
 
-                # TODO: get rid of preprocessor (handle inside replay mem)
-                s_t1 = self.preprocessor.process_state_for_network(x_t1_colored_fr)
-
-                # add more into replay memory
-                # self.memory.append(Sample(s_t, a_t, r_t, s_t1, is_terminal))
-                self.memory.append(s_t, a_t, r_t)
+                # save experience into replay memory
+                x_t_to_save = self.preprocessor.process_state_for_memory(x_t)
+                self.memory.append(x_t_to_save, a_t, r_t)
                 if i == 0:
                     for _ in xrange(self.memory.window_size-1):
-                        self.memory.append(s_t, a_t, r_t)
-                        
-                s_t = s_t1    # was a bug
-                x_t = x_t1_colored
+                        self.memory.append(x_t_to_save, a_t, r_t)
+
+                # update the current frame
+                x_t = x_t1
                 
-                # sample minibatches from replay memory
+                # NOTE: ignore removing flickering for now
+                # if env.env.spec.id.startswith('SpaceInvaders'):
+                #     x_t1_fr = self.preprocessor.atari.remove_flickering(x_t, x_t1)
+                # else:
+                #     x_t1_fr = x_t1
+                # # TODO: get rid of preprocessor (handle inside replay mem)
+                # s_t1 = self.preprocessor.process_state_for_network(x_t1_colored_fr)
+                # add more into replay memory
+                # self.memory.append(Sample(s_t, a_t, r_t, s_t1, is_terminal))
+                # self.memory.append(s_t, a_t, r_t)
+                # if i == 0:
+                #     for _ in xrange(self.memory.window_size-1):
+                #         self.memory.append(s_t, a_t, r_t)
+                        
+                # s_t = s_t1    # was a bug
+                
+                # sample minibatches from replay memory to learn 
                 if i % self.train_freq == 0 and self.memory.size() >= self.num_burn_in:
-                    # acc_loss += self.update()
                     loss, max_avg_q = self.update()
                     acc_loss += loss
                     acc_qvalue += max_avg_q
@@ -439,8 +457,10 @@ class DQNAgent:
                         json.dump(self.q_source.to_json(), outfile)
                     epoch += 1
 
-            # to be implemented
-            self.memory.end_episode(s_t1, is_terminal)
+            # save processed final frame into memory
+            # self.memory.end_episode(s_t1, is_terminal)
+            x_t1_to_save = self.preprocessor.process_state_for_memory(x_t1)
+            self.memory.end_episode(x_t1_to_save, is_terminal)
             self.preprocessor.history.reset()
             episode_num += 1
             
@@ -457,7 +477,6 @@ class DQNAgent:
                 stats = [acc_reward, np.mean(episode_max_qvalues), acc_loss]
 
                 for i in range(len(stats)):
-                # print stats[i]
                     sess.run(assign_ops[i],{summary_placeholders[i]: float(stats[i])})
                     summary_str = sess.run(summary_op)    
                     summary_writer.add_summary(summary_str, self.iterations)
@@ -496,14 +515,17 @@ class DQNAgent:
 
                 # select action
                 if i % self.train_freq == 0:
-                    a_t = self.select_action(s_t, train=False)
+                    a_t = self.select_action(s_t/255., train=False)
                 else:
                     a_t = a_last
                 a_last = a_t
 
                 # simulate 
                 x_t1_colored, r_t, is_terminal, debug_info = env.step(a_t)  # any action
-                x_t1_colored_fr = self.preprocessor.atari.remove_flickering(x_t, x_t1_colored)
+                if env.env.spec.id.startswith('SpaceInvaders'):
+                    x_t1_colored_fr = self.preprocessor.atari.remove_flickering(x_t, x_t1_colored)
+                else:
+                    x_t1_colored_fr = x_t1_colored
                 acc_reward += r_t
 
                 # get new state
@@ -519,7 +541,7 @@ class DQNAgent:
 
                 self.iterations += 1
 
-                # env.render()
+                env.render()
                 
             episode_num += 1
             episode_rewards.append(acc_reward)

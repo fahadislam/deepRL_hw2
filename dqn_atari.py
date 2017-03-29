@@ -16,6 +16,7 @@ from keras.layers import Dense, Flatten
 from keras.layers import Lambda, Input
 from keras.layers.merge import Add
 from keras.layers import Conv2D
+from keras.layers.normalization import BatchNormalization
 from keras.optimizers import Adam, RMSprop
 from keras.utils import plot_model
 from keras import backend as K
@@ -87,9 +88,7 @@ def create_model_duel(window, input_shape, num_actions, init_method, model_name=
 
 
 def create_model(window, input_shape, num_actions, init_method, model_name='q_network'):  # noqa: D103
-
     input_rows, input_cols = input_shape[0], input_shape[1]
-
     print 'Now we start building the model ... '
     model = Sequential()
     if init_method=='he':
@@ -101,7 +100,7 @@ def create_model(window, input_shape, num_actions, init_method, model_name='q_ne
                          activation='relu'))
         model.add(Flatten())
         model.add(Dense(256, activation='relu', kernel_initializer=initializers.he_normal()))
-        model.add(Dense(num_actions, activation='linear')) 
+        model.add(Dense(num_actions, activation='linear'))
     elif init_method=='default':
         model.add(Conv2D(16, kernel_size=(8,8), strides=(4,4), padding='same',
                          activation='relu', input_shape=(window,input_rows,input_cols)))
@@ -147,7 +146,7 @@ def main(args):
         target = create_model_duel(window, input_shape, num_actions, args.init)
     # memory = ReplayMemory(1000000, 100)  # window length is arbitrary
     target_update_freq = 10000
-    num_burn_in = 50000
+    num_burn_in = 50
     train_freq = 4
     batch_size = 32
     gamma = 0.99

@@ -191,34 +191,32 @@ class ReplayMemoryEfficient:
             self.full = True
             self.index = 0
 
-    def clip_reward(self, reward):
-        if reward > 0:
-            return 1
-        elif reward < 0:
-            return -1
-        else:
-            return 0
-
-    def append(self, state, action, reward):
-        self.frames[self.index, :, :] = state[0][0]
+    # def append(self, state, action, reward):
+    #     self.frames[self.index, :, :] = state[0][0]
+    def append(self, frame, action, reward):
+        self.frames[self.index, :, :] = frame
         self.actions[self.index] = action
-        self.rewards[self.index] = self.clip_reward(reward)
+        self.rewards[self.index] = reward
         self.terminals[self.index] = False
         self.index += 1
         self.check()
         
-    def end_episode(self, state, is_terminal):  # is_terminal has no effect
-        self.frames[self.index, :, :] = state[0][0]
+    # def end_episode(self, state, is_terminal):  # is_terminal has no effect
+    #     self.frames[self.index, :, :] = state[0][0]
+    def end_episode(self, frame, is_terminal):  # is_terminal has no effect
+        self.frames[self.index, :, :] = frame
         self.actions[self.index] = 0
         self.rewards[self.index] = 0
         self.terminals[self.index] = True
         self.index += 1
         self.check()
 
-    def fetch_state(self, indices):
+    def fetch_window(self, indices):
         indices = indices[::-1]
-        state = self.frames[indices].astype(np.float32)/255.0
-        return state.reshape(1, state.shape[0], state.shape[1], state.shape[2])
+        # bug
+        # state = self.frames[indices].astype(np.float32)/255.0
+        window = self.frames[indices]
+        return window.reshape(1, window.shape[0], window.shape[1], window.shape[2])
 
     def draw(self, batch_size):
         cnt = 0
@@ -240,9 +238,9 @@ class ReplayMemoryEfficient:
     
     def sample(self, batch_size):
         I = self.draw(batch_size)
-        return [Sample(self.fetch_state(np.arange(i-(self.window_size-1), i+1)), 
+        return [Sample(self.fetch_window(np.arange(i-(self.window_size-1), i+1)), 
                        self.actions[i], self.rewards[i],
-                       self.fetch_state(np.arange(i-(self.window_size-2), i+2)), 
+                       self.fetch_window(np.arange(i-(self.window_size-2), i+2)), 
                        self.terminals[i+1]) for i in I]
 
     def clear(self):
