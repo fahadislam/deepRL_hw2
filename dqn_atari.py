@@ -145,6 +145,8 @@ def main(args):
         model = create_model_duel(window, input_shape, num_actions, args.init)
         target = create_model_duel(window, input_shape, num_actions, args.init)
     # memory = ReplayMemory(1000000, 100)  # window length is arbitrary
+    # target_update_freq = 10000
+    # num_burn_in = 50000
     target_update_freq = 10000
     num_burn_in = 50000
     train_freq = 4
@@ -172,12 +174,10 @@ def main(args):
     # preprocessor
     preprocessor = PreprocessorSequence()
     # policy
-    if args.mode == 'train':
-        policy = LinearDecayGreedyEpsilonPolicy(1, 0.1, 1000000)
-    elif args.mode == 'test':
-        policy = GreedyEpsilonPolicy(epsilon)
+    policy = LinearDecayGreedyEpsilonPolicy(1, 0.1, 1000000)
+    policy_eval = GreedyEpsilonPolicy(epsilon)
     # build agent
-    dqn_agent = DQNAgent(args.type, model, target, preprocessor, memory, policy,
+    dqn_agent = DQNAgent(sess, env, args.type, model, target, preprocessor, memory, policy, policy_eval, 
                          gamma, target_update_freq, num_burn_in, train_freq,
                          batch_size, num_actions, updates_per_epoch,
                          args.output)
@@ -187,11 +187,11 @@ def main(args):
         # adam = Adam(lr=0.00025, beta_1=0.95, beta_2=0.95, epsilon=0.1)
         adam = Adam(lr=0.0001)
         dqn_agent.compile_networks(adam, mean_huber_loss)
-        dqn_agent.fit(env, num_iterations, max_episode_length)
+        dqn_agent.fit(num_iterations, max_episode_length)
     elif args.mode == 'test':  # load net and evaluate
         model_path = os.path.join(args.output, 'model_epoch%03d' % args.epoch)
         dqn_agent.load_networks(model_path)
-        lengths, rewards = dqn_agent.evaluate(env, eval_episodes, max_episode_length)
+        lengths, rewards = dqn_agent.evaluate(eval_episodes, max_episode_length)
         if args.submit:
             gym.upload(monitor_log, api_key='sk_wa5MgeDTnOQ209qBCP7jQ')
         else:

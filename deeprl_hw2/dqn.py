@@ -19,26 +19,6 @@ import tensorflow as tf
 
 import pdb 
 
-def build_summaries():
-    episode_reward = tf.Variable(0.)
-    tf.summary.scalar("Reward", episode_reward)
-    episode_ave_max_q = tf.Variable(0.)
-    tf.summary.scalar("Qmax Value", episode_ave_max_q)
-    episode_ave_loss = tf.Variable(0.)
-    tf.summary.scalar("Loss", episode_ave_loss)
-
-    summary_vars = [episode_reward, episode_ave_max_q, episode_ave_loss]
-    summary_placeholders = [tf.placeholder("float")
-                            for i in range(len(summary_vars))]
-
-    assign_ops = [summary_vars[i].assign(summary_placeholders[i])
-                  for i in range(len(summary_vars))]
-
-    summary_op = tf.summary.merge_all()
-
-    tf.global_variables_initializer().run()      
-
-    return summary_placeholders, assign_ops, summary_op
 
 class DQNAgent:
     """Class implementing DQN.
@@ -80,16 +60,20 @@ class DQNAgent:
     """
 
     # TODO: remove num_actions - instead, derive from q_network
-    def __init__(self, type, q_source, q_target, preprocessor, memory, policy,
+    def __init__(self, sess, env, type, q_source, q_target, preprocessor, memory, policy, policy_eval, 
                  gamma, target_update_freq, num_burn_in, train_freq, batch_size,
                  num_actions, updates_per_epoch, log_dir): 
 
+        self.sess = sess
+        self.env = env
+        
         self.type = type
         self.q_source = q_source
         self.q_target = q_target
         self.preprocessor = preprocessor
         self.memory = memory
         self.policy = policy
+        self.policy_eval = policy_eval
         self.gamma = gamma
         self.target_update_freq = target_update_freq
         self.num_burn_in = num_burn_in
@@ -101,6 +85,39 @@ class DQNAgent:
         self.iterations = 0
         self.updates_per_epoch = updates_per_epoch
         self.reset_target_count = 0
+
+        self.summary_writer = tf.summary.FileWriter("log_dir")
+        self.train_summary_placeholders, self.train_assign_ops, self.train_summary_op = self.build_training_summaries()
+        self.test_summary_placeholders, self.test_assign_ops, self.test_summary_op = self.build_testing_summaries()
+        
+    def build_training_summaries(self):
+        with tf.name_scope('training'):
+            episode_reward = tf.Variable(0.)
+            tf.summary.scalar("average reward per life", episode_reward)
+            episode_ave_max_q = tf.Variable(0.)
+            tf.summary.scalar("average max Q per life", episode_ave_max_q)
+            episode_ave_loss = tf.Variable(0.)
+            tf.summary.scalar("average loss per life", episode_ave_loss)
+            summary_vars = [episode_reward, episode_ave_max_q, episode_ave_loss]
+            summary_placeholders = [tf.placeholder("float") for i in range(len(summary_vars))]
+            assign_ops = [summary_vars[i].assign(summary_placeholders[i]) for i in range(len(summary_vars))]
+            summary_op = tf.summary.merge_all()
+            self.sess.run(tf.global_variables_initializer())
+            return summary_placeholders, assign_ops, summary_op
+
+    def build_testing_summaries(self):
+        with tf.name_scope('testing'):
+            episode_reward = tf.Variable(0.)
+            tf.summary.scalar("average reward per game", episode_reward)
+            episode_length = tf.Variable(0.)
+            tf.summary.scalar("game length per game", episode_length)
+            summary_vars = [episode_reward, episode_length]
+            summary_placeholders = [tf.placeholder("float") for i in range(len(summary_vars))]
+            assign_ops = [summary_vars[i].assign(summary_placeholders[i]) for i in range(len(summary_vars))]
+            summary_op = tf.summary.merge_all()
+
+            self.sess.run(tf.global_variables_initializer())
+            return summary_placeholders, assign_ops, summary_op
 
     def sync_networks(self):
         for (layer_source, layer_target) in zip(self.q_source.layers, self.q_target.layers):
@@ -185,7 +202,7 @@ class DQNAgent:
                     self.policy.epsilon -= self.policy.step
         else:  # for testing
             q_values = self.calc_q_values(state, False)
-            action = self.policy.select_action(q_values)
+            action = self.policy_eval.select_action(q_values)
         return action
 
     def update(self):
@@ -249,6 +266,7 @@ class DQNAgent:
         if self.reset_target_count == self.target_update_freq:
             self.reset_target_count = 0
             self.sync_networks()
+            self.evaluate()
 
         assert(state_ts.dtype=='float32')
         assert(0 <= np.min(state_ts) and np.max(state_ts) <= 1)
@@ -333,7 +351,7 @@ class DQNAgent:
 
         return loss
 
-    def fit(self, env, num_iterations, max_episode_length=None):
+    def fit(self, num_iterations, max_episode_length=None):
         """Fit your model to the provided environment.
 
         Its a good idea to print out things like loss, average reward,
@@ -361,11 +379,7 @@ class DQNAgent:
 
         # observation = env.render(mode='rgb_array')
         # history_preprocessor = HistoryPreprocessor()
-        sess = tf.InteractiveSession()
-        
-        summary_writer = tf.summary.FileWriter("log_dir")
-        summary_placeholders, assign_ops, summary_op = build_summaries()
-
+        # sess = tf.InteractiveSession()
         episode_num = 0
         episode_rewards = []
         episode_max_qvalues = []
@@ -373,21 +387,21 @@ class DQNAgent:
         episode_length = []
         num_updates = 0
         epoch = 1
-        life_num = env.unwrapped.ale.lives()
+        life_num = self.env.unwrapped.ale.lives()
         is_terminal = True
 
         while True:
             acc_iter = 0
-            acc_loss = 0
-            acc_reward = 0
-            acc_qvalue = 0
+            acc_loss = 0.
+            acc_reward = 0.
+            acc_qvalue = 0.
 
             if is_terminal:
-                x_t = env.reset()
-                life_num = env.unwrapped.ale.lives()
+                x_t = self.env.reset()
+                life_num = self.env.unwrapped.ale.lives()
                 
             # s_t = self.preprocessor.process_state_for_network(x_t)
-            a_last = -1
+            # a_last = -1
             for i in range(max_episode_length):
                 # preprocess the current frame:
                 # 1. resize/crop, grayscale, convert to float32,
@@ -395,14 +409,15 @@ class DQNAgent:
                 # 3. stack with previous preprocessed frames
                 # 4. remove flickering (if needed)
                 s_t = self.preprocessor.process_state_for_network(x_t)
-                if i % self.train_freq == 0:
-                    a_t = self.select_action(s_t, train=True)
-                else:
-                    a_t = a_last
-                a_last = a_t
+                # if i % self.train_freq == 0:
+                #     a_t = self.select_action(s_t, train=True)
+                # else:
+                #     a_t = a_last
+                a_t = self.select_action(s_t, train=True)
+                # a_last = a_t
 
                 # execute action
-                x_t1, r_t, is_terminal, debug_info = env.step(a_t)  
+                x_t1, r_t, is_terminal, debug_info = self.env.step(a_t)  
                 acc_reward += r_t
 
                 # save experience into replay memory
@@ -476,83 +491,123 @@ class DQNAgent:
 
                 stats = [acc_reward, np.mean(episode_max_qvalues), acc_loss]
 
-                for i in range(len(stats)):
-                    sess.run(assign_ops[i],{summary_placeholders[i]: float(stats[i])})
-                    summary_str = sess.run(summary_op)    
-                    summary_writer.add_summary(summary_str, self.iterations)
+                feed_dict = {self.train_summary_placeholders[si]:float(stats[si]) for si in range(len(stats))}
+                self.sess.run(self.train_assign_ops, feed_dict)
+                summary_str = self.sess.run(self.train_summary_op)    
+                self.summary_writer.add_summary(summary_str, self.iterations)
 
-    def evaluate(self, env, eval_episodes, max_episode_length=None):
-        """Test your agent with a provided environment.
-        
-        You shouldn't update your network parameters here. Also if you
-        have any layers that vary in behavior between train/test time
-        (such as dropout or batch norm), you should set them to test.
-
-        Basically run your policy on the environment and collect stats
-        like cumulative reward, average episode length, etc.
-
-        You can also call the render function here if you want to
-        visually inspect your policy.
-        """
-
-        episode_num = 0
-        episode_rewards = []
-        episode_lengths = []
-        life_num = env.unwrapped.ale.lives()
+    def evaluate(self, episode_num=20, max_episode_length=10000):
+        # episode_num = 20
+        episode_rewards = np.zeros(episode_num)
+        episode_length = np.zeros(episode_num)
+        # epoch = 1
+        # life_num = env.unwrapped.ale.lives()
         is_terminal = True
 
-        while True:
-            episode_lengths.append(0)
-            acc_reward = 0
+        print 'Evaluating', 
+        for k in range(episode_num):
+            print ',',
+            acc_iter = 0
+            # acc_loss = 0
+            acc_reward = 0.
+            # acc_qvalue = 0
 
             if is_terminal:
-                x_t = env.reset()
-                life_num = env.unwrapped.ale.lives()
-
-            s_t = self.preprocessor.process_state_for_network(x_t)
-            a_last = -1
+                x_t = self.env.reset()
+                # life_num = env.unwrapped.ale.lives()
+                
+            # s_t = self.preprocessor.process_state_for_network(x_t)
+            # a_last = -1
             for i in range(max_episode_length):
+                # preprocess the current frame:
+                # 1. resize/crop, grayscale, convert to float32,
+                # 2. normalize from 255 to 1
+                # 3. stack with previous preprocessed frames
+                # 4. remove flickering (if needed)
+                s_t = self.preprocessor.process_state_for_network(x_t)
+                # if i % self.train_freq == 0:
+                #     a_t = self.select_action(s_t, train=True)
+                # else:
+                #     a_t = a_last
+                # a_last = a_t
+                a_t = self.select_action(s_t, train=False)
 
-                # select action
-                if i % self.train_freq == 0:
-                    a_t = self.select_action(s_t/255., train=False)
-                else:
-                    a_t = a_last
-                a_last = a_t
-
-                # simulate 
-                x_t1_colored, r_t, is_terminal, debug_info = env.step(a_t)  # any action
-                if env.env.spec.id.startswith('SpaceInvaders'):
-                    x_t1_colored_fr = self.preprocessor.atari.remove_flickering(x_t, x_t1_colored)
-                else:
-                    x_t1_colored_fr = x_t1_colored
+                # execute action
+                x_t1, r_t, is_terminal, debug_info = self.env.step(a_t)  
                 acc_reward += r_t
 
-                # get new state
-                s_t1 = self.preprocessor.process_state_for_network(x_t1_colored_fr)
-                s_t = s_t1    # was a bug
-                x_t = x_t1_colored
+                # # save experience into replay memory
+                # x_t_to_save = self.preprocessor.process_state_for_memory(x_t)
+                # self.memory.append(x_t_to_save, a_t, r_t)
+                # if i == 0:
+                #     for _ in xrange(self.memory.window_size-1):
+                #         self.memory.append(x_t_to_save, a_t, r_t)
 
-                episode_lengths[-1] += 1
+                # update the current frame
+                x_t = x_t1
                 
-                if is_terminal or debug_info['ale.lives'] < life_num:
-                    life_num = debug_info['ale.lives']
+                # # sample minibatches from replay memory to learn 
+                # if i % self.train_freq == 0 and self.memory.size() >= self.num_burn_in:
+                #     loss, max_avg_q = self.update()
+                #     acc_loss += loss
+                #     acc_qvalue += max_avg_q
+                #     num_updates += 1
+                    
+                # if self.iterations == num_iterations:
+                #     print("We've reached the maximum number of iterations... ")
+                #     return
+                # if is_terminal or debug_info['ale.lives'] < life_num:
+                #     life_num = debug_info['ale.lives']
+                #     break
+                if is_terminal:
                     break
-
-                self.iterations += 1
-
-                env.render()
                 
+                # self.iterations += 1
+                acc_iter += 1
+                
+                # if num_updates > epoch * self.updates_per_epoch:
+                #     print('Saving model at epoch %d ... ' % epoch)
+                #     model_path = os.path.join(self.log_dir, 'model_epoch%03d' % epoch)
+                #     self.q_source.save_weights(model_path + '.h5')
+                #     with open(model_path + '.json', 'w') as outfile:
+                #         json.dump(self.q_source.to_json(), outfile)
+                #     epoch += 1
+
+            # save processed final frame into memory
+            # self.memory.end_episode(s_t1, is_terminal)
+            # x_t1_to_save = self.preprocessor.process_state_for_memory(x_t1)
+            # self.memory.end_episode(x_t1_to_save, is_terminal)
+            
+            self.preprocessor.history.reset()
             episode_num += 1
-            episode_rewards.append(acc_reward)
 
-            ts = time.time()
-            st = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
-            print st, ': episode %d, iterations %d, length %d(%d), acc_reward %.2f(%.2f)' % (
-                episode_num, self.iterations, episode_lengths[-1], np.mean(episode_lengths),
-                acc_reward, np.mean(episode_rewards))
+            episode_rewards[k] = acc_reward
+            episode_length[k] = acc_iter
 
-            if episode_num == eval_episodes:
-                break
+        stats = [np.mean(episode_rewards), np.mean(episode_length)]
+        # for i in range(len(stats)):
+        #     self.sess.run(assign_ops[i], {summary_placeholders[i]: float(stats[i])})
+        feed_dict = {self.test_summary_placeholders[si]:float(stats[si]) for si in range(len(stats))}
+        self.sess.run(self.test_assign_ops, feed_dict)
+        summary_str = self.sess.run(self.test_summary_op)    
+        self.summary_writer.add_summary(summary_str, self.iterations)
 
-        return episode_lengths, episode_rewards
+        print ''
+
+        # if self.memory.size() >= self.num_burn_in:
+        #     episode_rewards.append(acc_reward)
+        #     episode_max_qvalues.append(acc_qvalue)
+        #     episode_length.append(acc_iter)
+        #     episode_loss.append(acc_loss)
+        #     ts = time.time()
+        #     st = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
+        #     print st, ': episode %d, iterations %d, length %d(%d), num_updates %d, max_qvalue %.2f(%.2f), acc_reward %.2f(%.2f) , loss %.3f(%.3f)' % (
+        #         episode_num, self.iterations, episode_length[-1], np.mean(episode_length), num_updates, acc_qvalue, np.mean(episode_max_qvalues), acc_reward, np.mean(episode_rewards), episode_loss[-1], np.mean(episode_loss))
+
+        #     stats = [acc_reward, np.mean(episode_max_qvalues), acc_loss]
+
+        #     for i in range(len(stats)):0
+        #         self.sess.run(assign_ops[i],{summary_placeholders[i]: float(stats[i])})
+        #         summary_str = self.sess.run(summary_op)    
+        #         summary_writer.add_summary(summary_str, self.iterations)
+                    
