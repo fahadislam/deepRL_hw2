@@ -7,7 +7,6 @@ from matplotlib import pyplot as plt
 
 from deeprl_hw2 import utils
 from deeprl_hw2.core import Preprocessor
-from deeprl_hw2.visual import flatten_state
 
 import skimage as skimage
 from skimage import transform, color, exposure

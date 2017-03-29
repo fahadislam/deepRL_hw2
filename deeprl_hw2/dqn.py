@@ -171,7 +171,7 @@ class DQNAgent:
             return self.update_policy_double_DQN()
         elif self.type == 'double-Q':
             return self.update_policy_double_Q()
-        elif self.type in ['linear', 'linear-simple', 'normal', 'duel']:
+        elif self.type in ['linear', 'linear-simple', 'DQN', 'duel']:
             return self.update_policy()
         else:
             raise Exception('Type not supported for updating.')
