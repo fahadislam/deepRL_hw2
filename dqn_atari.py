@@ -146,7 +146,7 @@ def main(args):
         target = create_model_duel(window, input_shape, num_actions, args.init)
     # memory = ReplayMemory(1000000, 100)  # window length is arbitrary
     target_update_freq = 10000
-    num_burn_in = 50
+    num_burn_in = 50000
     train_freq = 4
     batch_size = 32
     gamma = 0.99
@@ -182,10 +182,11 @@ def main(args):
                          batch_size, num_actions, updates_per_epoch,
                          args.output)
     if args.mode == 'train':  # compile net and train with fit
-        rmsprop = RMSprop(lr=0.00025, rho=0.95, epsilon=0.01)
-        dqn_agent.compile_networks(rmsprop, mean_huber_loss)
+        # rmsprop = RMSprop(lr=0.00025, rho=0.95, epsilon=0.01)
+        # dqn_agent.compile_networks(rmsprop, mean_huber_loss)
         # adam = Adam(lr=0.00025, beta_1=0.95, beta_2=0.95, epsilon=0.1)
-        # dqn_agent.compile_networks(adam, mean_huber_loss)
+        adam = Adam(lr=0.0001)
+        dqn_agent.compile_networks(adam, mean_huber_loss)
         dqn_agent.fit(env, num_iterations, max_episode_length)
     elif args.mode == 'test':  # load net and evaluate
         model_path = os.path.join(args.output, 'model_epoch%03d' % args.epoch)
