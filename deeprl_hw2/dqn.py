@@ -86,7 +86,7 @@ class DQNAgent:
         self.updates_per_epoch = updates_per_epoch
         self.reset_target_count = 0
 
-        self.summary_writer = tf.summary.FileWriter("log_dir")
+        self.summary_writer = tf.summary.FileWriter(os.path.join(log_dir, "tb_log"))
         self.train_summary_placeholders, self.train_assign_ops, self.train_summary_op = self.build_training_summaries()
         self.test_summary_placeholders, self.test_assign_ops, self.test_summary_op = self.build_testing_summaries()
         
@@ -120,11 +120,11 @@ class DQNAgent:
             return summary_placeholders, assign_ops, summary_op
 
     def sync_networks(self):
-        ops = [self.q_target.weights[i].assign(self.q_source.weights[i]) for i in range(len(self.q_source.weights))]
-        self.sess.run(ops)
-        # for (layer_source, layer_target) in zip(self.q_source.layers, self.q_target.layers):
-        #     w = layer_source.get_weights()
-        #     layer_target.set_weights(w)
+        # ops = [self.q_target.weights[i].assign(self.q_source.weights[i]) for i in range(len(self.q_source.weights))]
+        # self.sess.run(ops)
+        for (layer_source, layer_target) in zip(self.q_source.layers, self.q_target.layers):
+            w = layer_source.get_weights()
+            layer_target.set_weights(w)
         # pdb.set_trace()
 
     def compile_networks(self, optimizer, loss_func):
@@ -264,16 +264,16 @@ class DQNAgent:
             else:
                 targets[i, action_t] = reward_t + self.gamma * np.max(Q_hat[i])
 
+        assert(state_ts.dtype=='float32')
+        assert(0 <= np.min(state_ts) and np.max(state_ts) <= 1)
+        loss = self.q_source.train_on_batch(state_ts, targets)
+
         # occasionally update the target network
         self.reset_target_count += 1
         if self.reset_target_count == self.target_update_freq:
             self.reset_target_count = 0
             self.sync_networks()
             self.evaluate()
-
-        assert(state_ts.dtype=='float32')
-        assert(0 <= np.min(state_ts) and np.max(state_ts) <= 1)
-        loss = self.q_source.train_on_batch(state_ts, targets)
 
         return loss, avg_max_q
 
@@ -282,10 +282,14 @@ class DQNAgent:
         # print 'updating policy using Double DQN'
         
         minibatch = self.memory.sample(self.batch_size)
+        minibatch = self.preprocessor.process_batch(minibatch)
 
+        # state_shape: 1 x 4 x 84 x 84
         state_shape = minibatch[0].state.shape
-        state_ts = np.zeros((self.batch_size, state_shape[1], state_shape[2], state_shape[3]))  # 32, 4, 84, 84
-        state_t1s = np.zeros((self.batch_size, state_shape[1], state_shape[2], state_shape[3]))  # 32, 4, 84, 84
+        # batch_shape: 32 x 4 x 84 x 84 
+        batch_shape = (self.batch_size, state_shape[1], state_shape[2], state_shape[3])
+        state_ts = np.zeros(batch_shape, dtype=np.float32)  # 32, 4, 84, 84
+        state_t1s = np.zeros(batch_shape, dtype=np.float32)  # 32, 4, 84, 84
 
         for i in range(0, self.batch_size):
             state_ts[i] = minibatch[i].state
@@ -295,9 +299,12 @@ class DQNAgent:
         Q_s = self.calc_q_values(state_t1s, target=False)
         Q_s_bar = self.calc_q_values(state_t1s, target=True)
         
+        avg_max_q = np.mean(np.max(targets, axis=1))
+
         for i in range(0, self.batch_size):
             action_t = minibatch[i].action  
             reward_t = minibatch[i].reward
+            assert(reward_t in [-1, 0, 1])
             terminal = minibatch[i].is_terminal
             
             if terminal:
@@ -305,26 +312,32 @@ class DQNAgent:
             else:
                 a_max = np.argmax(Q_s[i])
                 targets[i, action_t] = reward_t + self.gamma * Q_s_bar[i, a_max]
-            
+
+        assert(state_ts.dtype=='float32')
+        assert(0 <= np.min(state_ts) and np.max(state_ts) <= 1)        
+        loss = self.q_source.train_on_batch(state_ts, targets)
+
         # occasionally update the target network
         self.reset_target_count += 1
         if self.reset_target_count == self.target_update_freq:
             self.reset_target_count = 0
             self.sync_networks()
-
-        loss = self.q_source.train_on_batch(state_ts, targets)
-
-        return loss
+        
+        return loss, avg_max_q
 
     # TODO: double-check preprocessing steps
     def update_policy_double_Q(self):
         # print 'updating policy using Double DQN'
         
         minibatch = self.memory.sample(self.batch_size)
+        minibatch = self.preprocessor.process_batch(minibatch)
 
+        # state_shape: 1 x 4 x 84 x 84
         state_shape = minibatch[0].state.shape
-        state_ts = np.zeros((self.batch_size, state_shape[1], state_shape[2], state_shape[3]))  # 32, 4, 84, 84
-        state_t1s = np.zeros((self.batch_size, state_shape[1], state_shape[2], state_shape[3]))  # 32, 4, 84, 84
+        # batch_shape: 32 x 4 x 84 x 84 
+        batch_shape = (self.batch_size, state_shape[1], state_shape[2], state_shape[3])
+        state_ts = np.zeros(batch_shape, dtype=np.float32)  # 32, 4, 84, 84
+        state_t1s = np.zeros(batch_shape, dtype=np.float32)  # 32, 4, 84, 84
 
         for i in range(0, self.batch_size):
             state_ts[i] = minibatch[i].state
@@ -336,6 +349,8 @@ class DQNAgent:
         Q_s = self.calc_q_values(state_t1s, not coin)
         Q_s_bar = self.calc_q_values(state_t1s, coin)
         
+        avg_max_q = np.mean(np.max(targets, axis=1))
+
         for i in range(0, self.batch_size):
             action_t = minibatch[i].action  
             reward_t = minibatch[i].reward
@@ -346,13 +361,23 @@ class DQNAgent:
             else:
                 a_max = np.argmax(Q_s[i])
                 targets[i, action_t] = reward_t + self.gamma * Q_s_bar[i, a_max]
-            
+        
+        assert(state_ts.dtype=='float32')
+        assert(0 <= np.min(state_ts) and np.max(state_ts) <= 1)
+
         if not coin:
             loss = self.q_source.train_on_batch(state_ts, targets)
         else:
             loss = self.q_target.train_on_batch(state_ts, targets)
 
-        return loss
+        # NOTE: only use this count to trigger model evaluation
+        self.reset_target_count += 1
+        if self.reset_target_count == self.target_update_freq:
+            self.reset_target_count = 0
+            # self.sync_networks()
+            self.evaluate()
+
+        return loss, avg_max_q
 
     def fit(self, num_iterations, max_episode_length=None):
         """Fit your model to the provided environment.
@@ -597,7 +622,6 @@ class DQNAgent:
 
         print ''
 
-
     def play(self, episode_num=20, max_episode_length=10000):
         # episode_num = 20
         episode_rewards = np.zeros(episode_num)
@@ -687,15 +711,15 @@ class DQNAgent:
             episode_rewards[k] = acc_reward
             episode_length[k] = acc_iter
 
-        stats = [np.mean(episode_rewards), np.mean(episode_length)]
+        # stats = [np.mean(episode_rewards), np.mean(episode_length)]
         # for i in range(len(stats)):
         #     self.sess.run(assign_ops[i], {summary_placeholders[i]: float(stats[i])})
-        feed_dict = {self.test_summary_placeholders[si]:float(stats[si]) for si in range(len(stats))}
-        self.sess.run(self.test_assign_ops, feed_dict)
-        summary_str = self.sess.run(self.test_summary_op)    
-        self.summary_writer.add_summary(summary_str, self.iterations)
+        # feed_dict = {self.test_summary_placeholders[si]:float(stats[si]) for si in range(len(stats))}
+        # self.sess.run(self.test_assign_ops, feed_dict)
+        # summary_str = self.sess.run(self.test_summary_op)    
+        # self.summary_writer.add_summary(summary_str, self.iterations)
 
-        print ''
+        # print ''
         
         # if self.memory.size() >= self.num_burn_in:
         #     episode_rewards.append(acc_reward)
@@ -712,5 +736,4 @@ class DQNAgent:
         #     for i in range(len(stats)):0
         #         self.sess.run(assign_ops[i],{summary_placeholders[i]: float(stats[i])})
         #         summary_str = self.sess.run(summary_op)    
-        #         summary_writer.add_summary(summary_str, self.iterations)
-                    
+        #         summary_writer.add_summary(summary_str, self.iterations)                    
