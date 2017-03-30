@@ -217,7 +217,7 @@ def parse_input():  # noqa: D103
     parser.add_argument('-o', '--output', default='cache', help='Directory to save data to')
     parser.add_argument('--tag', default='', type=str, help='extra tag')
     parser.add_argument('--seed', default=0, type=int, help='Random seed')
-    parser.add_argument('--init', default='normal', type=str, help='normal|he|default')
+    parser.add_argument('--init', default='default', type=str, help='default|normal|he')
 
     args = parser.parse_args()
     args.output = os.path.join(args.output, '%s-%s'%(args.env, args.type))
