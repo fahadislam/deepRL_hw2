@@ -120,9 +120,12 @@ class DQNAgent:
             return summary_placeholders, assign_ops, summary_op
 
     def sync_networks(self):
-        for (layer_source, layer_target) in zip(self.q_source.layers, self.q_target.layers):
-            w = layer_source.get_weights()
-            layer_target.set_weights(w)
+        ops = [self.q_target.weights[i].assign(self.q_source.weights[i]) for i in range(len(self.q_source.weights))]
+        self.sess.run(ops)
+        # for (layer_source, layer_target) in zip(self.q_source.layers, self.q_target.layers):
+        #     w = layer_source.get_weights()
+        #     layer_target.set_weights(w)
+        # pdb.set_trace()
 
     def compile_networks(self, optimizer, loss_func):
         """Setup all of the TF graph variables/ops.
@@ -149,7 +152,7 @@ class DQNAgent:
         # print(model_path + '.json')
         # self.q_source = model_from_json(model_path + '.json')
         self.q_source.load_weights(model_path + '.h5')
-        self.sync_networks()
+        # self.sync_networks()
             
     def calc_q_values(self, state, target):
         """Given a state (or batch of states) calculate the Q-values.
@@ -234,7 +237,7 @@ class DQNAgent:
         minibatch = self.memory.sample(self.batch_size)
         minibatch = self.preprocessor.process_batch(minibatch)
 
-        # state_shape: 1 x 4 x 84 x 84
+        # state_shape:  1 x 4 x 84 x 84
         state_shape = minibatch[0].state.shape
         # batch_shape: 32 x 4 x 84 x 84
         batch_shape = (self.batch_size, state_shape[1], state_shape[2], state_shape[3])
