@@ -594,6 +594,106 @@ class DQNAgent:
 
         print ''
 
+
+    def play(self, episode_num=20, max_episode_length=10000):
+        # episode_num = 20
+        episode_rewards = np.zeros(episode_num)
+        episode_length = np.zeros(episode_num)
+        # epoch = 1
+        # life_num = env.unwrapped.ale.lives()
+        is_terminal = True
+
+        print 'Evaluating', 
+        for k in range(episode_num):
+            print ',',
+            acc_iter = 0
+            # acc_loss = 0
+            acc_reward = 0.
+            # acc_qvalue = 0
+
+            if is_terminal:
+                x_t = self.env.reset()
+                # life_num = env.unwrapped.ale.lives()
+                
+            # s_t = self.preprocessor.process_state_for_network(x_t)
+            # a_last = -1
+            for i in range(max_episode_length):
+                # preprocess the current frame:
+                # 1. resize/crop, grayscale, convert to float32,
+                # 2. normalize from 255 to 1
+                # 3. stack with previous preprocessed frames
+                # 4. remove flickering (if needed)
+                s_t = self.preprocessor.process_state_for_network(x_t)
+                # if i % self.train_freq == 0:
+                #     a_t = self.select_action(s_t, train=True)
+                # else:
+                #     a_t = a_last
+                # a_last = a_t
+                a_t = self.select_action(s_t, train=False)
+
+                # execute action
+                x_t1, r_t, is_terminal, debug_info = self.env.step(a_t)
+                self.env.render()
+                acc_reward += r_t
+
+                # # save experience into replay memory
+                # x_t_to_save = self.preprocessor.process_state_for_memory(x_t)
+                # self.memory.append(x_t_to_save, a_t, r_t)
+                # if i == 0:
+                #     for _ in xrange(self.memory.window_size-1):
+                #         self.memory.append(x_t_to_save, a_t, r_t)
+
+                # update the current frame
+                x_t = x_t1
+                
+                # # sample minibatches from replay memory to learn 
+                # if i % self.train_freq == 0 and self.memory.size() >= self.num_burn_in:
+                #     loss, max_avg_q = self.update()
+                #     acc_loss += loss
+                #     acc_qvalue += max_avg_q
+                #     num_updates += 1
+                    
+                # if self.iterations == num_iterations:
+                #     print("We've reached the maximum number of iterations... ")
+                #     return
+                # if is_terminal or debug_info['ale.lives'] < life_num:
+                #     life_num = debug_info['ale.lives']
+                #     break
+                if is_terminal:
+                    break
+                
+                # self.iterations += 1
+                acc_iter += 1
+                
+                # if num_updates > epoch * self.updates_per_epoch:
+                #     print('Saving model at epoch %d ... ' % epoch)
+                #     model_path = os.path.join(self.log_dir, 'model_epoch%03d' % epoch)
+                #     self.q_source.save_weights(model_path + '.h5')
+                #     with open(model_path + '.json', 'w') as outfile:
+                #         json.dump(self.q_source.to_json(), outfile)
+                #     epoch += 1
+
+            # save processed final frame into memory
+            # self.memory.end_episode(s_t1, is_terminal)
+            # x_t1_to_save = self.preprocessor.process_state_for_memory(x_t1)
+            # self.memory.end_episode(x_t1_to_save, is_terminal)
+            
+            self.preprocessor.history.reset()
+            episode_num += 1
+
+            episode_rewards[k] = acc_reward
+            episode_length[k] = acc_iter
+
+        stats = [np.mean(episode_rewards), np.mean(episode_length)]
+        # for i in range(len(stats)):
+        #     self.sess.run(assign_ops[i], {summary_placeholders[i]: float(stats[i])})
+        feed_dict = {self.test_summary_placeholders[si]:float(stats[si]) for si in range(len(stats))}
+        self.sess.run(self.test_assign_ops, feed_dict)
+        summary_str = self.sess.run(self.test_summary_op)    
+        self.summary_writer.add_summary(summary_str, self.iterations)
+
+        print ''
+        
         # if self.memory.size() >= self.num_burn_in:
         #     episode_rewards.append(acc_reward)
         #     episode_max_qvalues.append(acc_qvalue)

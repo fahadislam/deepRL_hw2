@@ -191,7 +191,7 @@ def main(args):
     elif args.mode == 'test':  # load net and evaluate
         model_path = os.path.join(args.output, 'model_epoch%03d' % args.epoch)
         dqn_agent.load_networks(model_path)
-        lengths, rewards = dqn_agent.evaluate(eval_episodes, max_episode_length)
+        lengths, rewards = dqn_agent.play(eval_episodes, max_episode_length)
         if args.submit:
             gym.upload(monitor_log, api_key='sk_wa5MgeDTnOQ209qBCP7jQ')
         else:
