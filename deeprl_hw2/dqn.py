@@ -322,6 +322,7 @@ class DQNAgent:
         if self.reset_target_count == self.target_update_freq:
             self.reset_target_count = 0
             self.sync_networks()
+            self.evaluate()
         
         return loss, avg_max_q
 

@@ -208,7 +208,7 @@ def main(args):
 def parse_input():  # noqa: D103
     parser = argparse.ArgumentParser(description='Run DQN on Atari Space Invaders')
     parser.add_argument('--gpu', default=0, type=int, help='Atari env name')
-    parser.add_argument('--env', default='Breakout-v0', help='Atari env name')
+    parser.add_argument('--env', default='SpaceInvaders-v0', help='Atari env name')
     parser.add_argument('--type', default='DQN', type=str, help='DQN|double-DQN|double-Q|duel|linear|linear-simple')
     parser.add_argument('--mode', default='train', help='train|test')
     # parser.add_argument('--run', default=0, type=int, help='run index')
