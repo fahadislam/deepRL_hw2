@@ -1,0 +1,80 @@
+\documentclass{article}
+
+\usepackage{amsmath}
+\title{10-703 Deep Reinforcement Learning and Control \\ Assignment 2 \\}
+\date{}
+
+\setlength\parindent{0pt}
+
+\begin{document}
+
+\maketitle
+
+\section*{Problem 1}
+
+Update (1) updates $Q(s,a)$ with $\alpha \Delta Q(s,a)$, where
+\begin{align}
+  \label{eq:1}
+  \Delta Q(s,a) = r + \gamma \max_{a' \in A} Q(s', a') - Q(s,a)
+\end{align}
+
+Update (2) updates $w$ with $\alpha \Delta w$, where
+\begin{align}
+  \label{eq:2}
+  \Delta w &= (r + \gamma \max_{a' \in A} Q(s', a') - Q(s,a)) \nabla_{w} Q_{w}(s,a) \\
+           &= \Delta Q(s,a) \nabla_{w} Q_{w}(s,a) 
+\end{align}
+
+Proving two updates are the same is equivalent to proving
+\begin{align}
+  \label{eq:3}
+  \Delta Q(s,a) = Q_{w+\Delta w}(s,a) - Q_{w}(s,a) 
+\end{align}
+
+The RHS is 
+\begin{align}
+  \label{eq:4}
+  Q_{w+\Delta w}(s,a) - Q_{w}(s,a) &= (w + \Delta w)^{T} \phi(s,a) - w^{T} \phi(s,a) \\
+                                   &= \Delta w^{T} \phi(s,a) \\
+\end{align}
+
+According to \eqref{eq:2},
+\begin{align}
+  \label{eq:5}
+  Q_{w+\Delta w}(s,a) - Q_{w}(s,a) = \Delta Q(s,a) (\nabla_{w} Q_{w}(s,a))^{T} \phi(s,a)\\
+\end{align}
+
+While,
+\begin{align}
+  \label{eq:6}
+  \nabla_{w} Q_{w}(s,a) = \nabla_{w} w^{T}\phi(s,a) = \phi(s,a)^{T}
+\end{align}
+
+Thus,
+\begin{align}
+  \label{eq:7}
+  Q_{w+\Delta w}(s,a) - Q_{w}(s,a) = \Delta Q(s,a) \phi(s,a)^{T} \phi(s,a)
+\end{align}
+
+Given $(s,a)$, $\phi(s,a)$ is an one-hot vector, so $\phi(s,a)^{T} \phi(s,a) = 1$.
+
+Thus, $Q_{w+\Delta w}(s,a) - Q_{w}(s,a) = \Delta Q(s,a)$. 
+
+\section*{Implement a linear Q-network with no experience replay or target fixing}
+
+\section*{Implement a linear Q-network with experience replay and target fixing}
+
+\section*{Implement a linear double Q-network}
+
+\section*{Implement the deep Q-network}
+
+\section*{Implement the double deep Q-network}
+
+\section*{Implement the dueling deep Q-network}
+
+\end{document}
+
+%%% Local Variables:
+%%% mode: latex
+%%% TeX-master: t
+%%% End:
