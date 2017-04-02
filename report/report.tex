@@ -103,6 +103,7 @@ The input to the network consists of an 84x84x4 image . The first hidden layer c
 \begin{figure}[h]
 \centering
 \includegraphics[scale=0.3]{dqn.png}
+\caption{Deep Q-Network}
 \end{figure}
 
 \section*{Implement the double deep Q-network}
@@ -112,6 +113,7 @@ The network architecture we used for double-DQN is the same as we used for DQN. 
 \begin{figure}[h]
 \centering
 \includegraphics[scale=0.3]{double.png}
+\caption{Double Deep Q-Network}
 \end{figure}
 
 \section*{Implement the dueling deep Q-network}
@@ -120,30 +122,37 @@ The first three hidden layers for the dueling-DQN are the same as the model we u
 
 \begin{figure}[h]
 \centering
+
 \includegraphics[scale=0.3]{duel.png}
+\caption{Dueling Deep Q-Network}
 \end{figure}
 
 The table summarizes the average total reward per episode in 100 episodes for the full trained models for all the network models we used for the results.
+
+\section*{Statistics}
+\begin{table}
+
 \begin{center}
- \begin{tabular}{||c | c c||} 
+ \begin{tabular}{||c | c||} 
  \hline
- Model & Avg. reward & Mean$\pm$std \\ [0.5ex] 
+ Model & Average Reward $\pm$ STD. \\ [0.5ex] 
  \hline\hline
- Linear & 0 & 0 \\ 
+ Linear & 0 \\ 
  \hline
- Linear* & 0 & 0 \\
+ Linear* & 0 \\
  \hline
- double-Linear & 0 & 0 \\
+ double-Linear & 0 \\
  \hline
- DQN & 0 & 0 \\
+ DQN & 454.7 $\pm$ 137.3 \\
  \hline
- double-DQN & 0 & 0 \\  
+ double-DQN & 414.3 $\pm$ 140.67 \\  
  \hline
- dueling-DQN & 0 & 0 \\ 
+ dueling-DQN & 362.5 $\pm$ 128.9 \\ 
  \hline
 \end{tabular}
 \end{center}
-
+\caption{Average rewards and standard deviations for the different network models after being trained for 24 epochs each (around 5000000 iterations). Each epoch comprises of 50000 network updates.}
+\end{table}
 \end{document}
 
 %%% Local Variables:
