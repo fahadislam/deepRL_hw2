@@ -818,7 +818,7 @@ class DQNAgent:
 
                 # execute action
                 x_t1, r_t, is_terminal, debug_info = self.env.step(a_t)
-                self.env.render()
+                # self.env.render()
                 acc_reward += r_t
 
                 # # save experience into replay memory

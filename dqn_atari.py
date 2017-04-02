@@ -128,7 +128,7 @@ def main(args):
     env = gym.make(args.env)
     if args.mode == 'test' and args.submit:
         monitor_log = os.path.join(args.output, 'monitor.log')
-        env = wrappers.Monitor(env, monitor_log)
+        env = wrappers.Monitor(env, monitor_log, force=True)
     # build model
     # actions 0-5: 0 do nothing, 1 fire, 2 right, 3 left, 4 right+fire, 5 left+fire
     num_actions = env.action_space.n
@@ -155,7 +155,7 @@ def main(args):
     epsilon = 0.05
     updates_per_epoch = 50000
     num_iterations = 50000000
-    eval_episodes = 200
+    eval_episodes = 100
     max_episode_length = 10000
 
     # simple: no experience replay and no target fixing 
@@ -196,17 +196,19 @@ def main(args):
     elif args.mode == 'test':  # load net and evaluate
         model_path = os.path.join(args.output, 'model_epoch%03d' % args.epoch)
         dqn_agent.load_networks(model_path)
-        lengths, rewards = dqn_agent.play(eval_episodes, max_episode_length)
-        if args.submit:
-            gym.upload(monitor_log, api_key='sk_wa5MgeDTnOQ209qBCP7jQ')
-        else:
-            log_file = open(os.path.join(args.output, 'evaluation.txt'), 'a+')
-            log_file.write('%d %f %f %f %f\n' % (args.epoch,
-                                                 np.mean(lengths),
-                                                 np.std(lengths),
-                                                 np.mean(rewards),
-                                                 np.std(rewards)))
-            log_file.close()
+        if args.submit: 
+            eval_episodes = 1
+        dqn_agent.play(eval_episodes, max_episode_length)
+        # if args.submit:
+        #     gym.upload(monitor_log, api_key='sk_wa5MgeDTnOQ209qBCP7jQ')
+        # else:
+        #     log_file = open(os.path.join(args.output, 'evaluation.txt'), 'a+')
+        #     log_file.write('%d %f %f %f %f\n' % (args.epoch,
+        #                                          np.mean(lengths),
+        #                                          np.std(lengths),
+        #                                          np.mean(rewards),
+        #                                          np.std(rewards)))
+        #     log_file.close()
     env.close()
 
 
