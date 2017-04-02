@@ -712,6 +712,8 @@ class DQNAgent:
             episode_rewards[k] = acc_reward
             episode_length[k] = acc_iter
 
+        print np.mean(episode_rewards)
+        print np.std(episode_rewards)
         # stats = [np.mean(episode_rewards), np.mean(episode_length)]
         # for i in range(len(stats)):
         #     self.sess.run(assign_ops[i], {summary_placeholders[i]: float(stats[i])})
