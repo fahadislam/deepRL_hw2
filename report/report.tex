@@ -89,10 +89,17 @@ To evaluate the performance we periodically run the learned policy for 20 episod
 
 
 \section*{Implement a linear Q-network with no experience replay or target fixing}
+\subsection*{Network model}
+We implement the linear Q-network with a perceptron, linearly mapping from 84x84x4 input to 6 actions.
 
 \section*{Implement a linear Q-network with experience replay and target fixing}
+\subsection*{Network model} 
+We use the same architecture as above, but enables experience replay and target fixing. 
 
 \section*{Implement a linear double Q-network}
+\subsection*{Network model}
+We created two models with the same architecture as other linear Q-networks. The key difference is that during training, we randomly choose one network to set the Q target, and the 
+other network to minimize the distance between its Q prediction and the Q target. 
 
 \section*{Implement the deep Q-network}
 \subsection*{Network model}

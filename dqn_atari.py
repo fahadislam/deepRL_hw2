@@ -159,11 +159,13 @@ def main(args):
     max_episode_length = 10000
 
     # simple: no experience replay and no target fixing 
-    if args.type == 'linear-simple':  
-        mem_size = 5
-        target_update_freq = 1
+    # if args.type == 'linear-simple':  
+    #     mem_size = 5
+    #     target_update_freq = 1
+    #     num_burn_in = 0
+    #     batch_size = 1
+    if args.type == 'linear-simple':
         num_burn_in = 0
-        batch_size = 1
         
     memory = ReplayMemoryEfficient(mem_size, window, input_shape)
     # with tf.device('/gpu:%d'%gpu_id):
@@ -187,7 +189,10 @@ def main(args):
         # adam = Adam(lr=0.00025, beta_1=0.95, beta_2=0.95, epsilon=0.1)
         adam = Adam(lr=0.0001)
         dqn_agent.compile_networks(adam, mean_huber_loss)
-        dqn_agent.fit(num_iterations, max_episode_length)
+        if args.type == 'linear-simple':
+            dqn_agent.fit_simple(num_iterations, max_episode_length)
+        else:
+            dqn_agent.fit(num_iterations, max_episode_length)
     elif args.mode == 'test':  # load net and evaluate
         model_path = os.path.join(args.output, 'model_epoch%03d' % args.epoch)
         dqn_agent.load_networks(model_path)

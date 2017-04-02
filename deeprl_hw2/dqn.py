@@ -213,7 +213,7 @@ class DQNAgent:
             return self.update_policy_double_DQN()
         elif self.type == 'double-Q':
             return self.update_policy_double_Q()
-        elif self.type in ['linear', 'linear-simple', 'DQN', 'duel']:
+        elif self.type in ['linear', 'DQN', 'duel']:
             return self.update_policy()
         else:
             raise Exception('Type not supported for updating.')
@@ -380,6 +380,72 @@ class DQNAgent:
 
         return loss, avg_max_q
 
+    def update_policy_simple(self, state, action, reward, next_state, is_terminal):
+        # minibatch = self.memory.sample(self.batch_size)
+        target = self.calc_q_values(state, False)
+        Q_hat = self.calc_q_values(next_state, False)
+        avg_max_q = np.mean(np.max(target, axis=1))
+
+        if is_terminal:
+            target[0,action] = reward
+        else: 
+            target[0,action] = reward + self.gamma * np.max(Q_hat[0])
+
+        assert(state.dtype=='float32')
+        assert(0 <= np.min(state) and np.max(state) <= 1)
+        loss = self.q_source.train_on_batch(state, target)
+
+        self.reset_target_count += 1
+        if self.reset_target_count == self.target_update_freq:
+            self.reset_target_count = 0
+            self.evaluate()
+
+        return loss, avg_max_q
+
+        # minibatch = [Sample(state, action, reward, next_state, is_terminal)]
+        # minibatch = self.preprocessor.process_batch(minibatch)
+
+        # # state_shape:  1 x 4 x 84 x 84
+        # state_shape = minibatch[0].state.shape
+        # # batch_shape: 32 x 4 x 84 x 84
+        # batch_shape = (self.batch_size, state_shape[1], state_shape[2], state_shape[3])
+        # state_ts = np.zeros(batch_shape, dtype=np.float32)
+        # state_t1s = np.zeros(batch_shape, dtype=np.float32)
+
+        # for i in range(0, self.batch_size):
+        #     state_ts[i] = minibatch[i].state
+        #     state_t1s[i] = minibatch[i].next_state
+
+        # targets = self.calc_q_values(state_ts, False)
+        # # Q_hat = self.calc_q_values(state_t1s, True)
+        # Q_hat = self.calc_q_values(state_t1s, False)
+
+        # avg_max_q = np.mean(np.max(targets, axis=1))
+
+        # for i in range(0, self.batch_size):
+        #     action_t = minibatch[i].action  
+        #     reward_t = minibatch[i].reward
+        #     assert(reward_t in [-1, 0, 1])
+        #     terminal = minibatch[i].is_terminal
+
+        #     if terminal:
+        #         targets[i, action_t] = reward_t
+        #     else:
+        #         targets[i, action_t] = reward_t + self.gamma * np.max(Q_hat[i])
+
+        # assert(state_ts.dtype=='float32')
+        # assert(0 <= np.min(state_ts) and np.max(state_ts) <= 1)
+        # loss = self.q_source.train_on_batch(state_ts, targets)
+
+        # # occasionally update the target network
+        # # self.reset_target_count += 1
+        # # if self.reset_target_count == self.target_update_freq:
+        #     self.reset_target_count = 0
+        #     self.sync_networks()
+        #     self.evaluate()
+
+        # return loss, avg_max_q
+
     def fit(self, num_iterations, max_episode_length=None):
         """Fit your model to the provided environment.
 
@@ -477,9 +543,9 @@ class DQNAgent:
                 
                 # sample minibatches from replay memory to learn 
                 if i % self.train_freq == 0 and self.memory.size() >= self.num_burn_in:
-                    loss, max_avg_q = self.update()
+                    loss, avg_max_q = self.update()
                     acc_loss += loss
-                    acc_qvalue += max_avg_q
+                    acc_qvalue += avg_max_q
                     num_updates += 1
                     
                 if self.iterations == num_iterations:
@@ -505,6 +571,97 @@ class DQNAgent:
             # self.memory.end_episode(s_t1, is_terminal)
             x_t1_to_save = self.preprocessor.process_state_for_memory(x_t1)
             self.memory.end_episode(x_t1_to_save, is_terminal)
+            self.preprocessor.history.reset()
+            episode_num += 1
+            
+            if self.memory.size() >= self.num_burn_in:
+                episode_rewards.append(acc_reward)
+                episode_max_qvalues.append(acc_qvalue)
+                episode_length.append(acc_iter)
+                episode_loss.append(acc_loss)
+                ts = time.time()
+                st = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
+                print st, ': episode %d, iterations %d, length %d(%d), num_updates %d, max_qvalue %.2f(%.2f), acc_reward %.2f(%.2f) , loss %.3f(%.3f)' % (
+                    episode_num, self.iterations, episode_length[-1], np.mean(episode_length), num_updates, acc_qvalue, np.mean(episode_max_qvalues), acc_reward, np.mean(episode_rewards), episode_loss[-1], np.mean(episode_loss))
+
+                stats = [acc_reward, np.mean(episode_max_qvalues), acc_loss]
+
+                feed_dict = {self.train_summary_placeholders[si]:float(stats[si]) for si in range(len(stats))}
+                self.sess.run(self.train_assign_ops, feed_dict)
+                summary_str = self.sess.run(self.train_summary_op)    
+                self.summary_writer.add_summary(summary_str, self.iterations)
+
+    def fit_simple(self, num_iterations, max_episode_length=None):
+        episode_num = 0
+        episode_rewards = []
+        episode_max_qvalues = []
+        episode_loss = []
+        episode_length = []
+        num_updates = 0
+        epoch = 1
+        life_num = self.env.unwrapped.ale.lives()
+        is_terminal = True
+
+        while True:
+            acc_iter = 0
+            acc_loss = 0.
+            acc_reward = 0.
+            acc_qvalue = 0.
+
+            if is_terminal:
+                x_t = self.env.reset()
+                life_num = self.env.unwrapped.ale.lives()
+                
+            for i in range(max_episode_length):
+                # preprocess the current frame:
+                # 1. resize/crop, grayscale, convert to float32,
+                # 2. normalize from 255 to 1
+                # 3. stack with previous preprocessed frames
+                # 4. remove flickering (if needed)
+                s_t = self.preprocessor.process_state_for_network(x_t)
+
+                # select action
+                a_t = self.select_action(s_t, train=True)
+
+                # execute action
+                x_t1, r_t, is_terminal, debug_info = self.env.step(a_t)  
+                acc_reward += r_t
+
+                # sample minibatches from replay memory to learn 
+                if i % self.train_freq == 0 and self.memory.size() >= self.num_burn_in:
+                    # loss, max_avg_q = self.update()
+                    s_t1 = self.preprocessor.process_state_for_network(x_t1)
+                    loss, avg_max_q = self.update_policy_simple(s_t, a_t, r_t, s_t1, is_terminal)
+                    acc_loss += loss
+                    acc_qvalue += avg_max_q
+                    num_updates += 1
+
+                # update the current frame
+                x_t = x_t1
+                    
+                if self.iterations == num_iterations:
+                    print("We've reached the maximum number of iterations... ")
+                    return
+
+                if is_terminal or debug_info['ale.lives'] < life_num:
+                    life_num = debug_info['ale.lives']
+                    break
+                
+                self.iterations += 1
+                acc_iter += 1
+                
+                if num_updates > epoch * self.updates_per_epoch:
+                    print('Saving model at epoch %d ... ' % epoch)
+                    model_path = os.path.join(self.log_dir, 'model_epoch%03d' % epoch)
+                    self.q_source.save_weights(model_path + '.h5')
+                    with open(model_path + '.json', 'w') as outfile:
+                        json.dump(self.q_source.to_json(), outfile)
+                    epoch += 1
+
+            # save processed final frame into memory
+            # self.memory.end_episode(s_t1, is_terminal)
+            # x_t1_to_save = self.preprocessor.process_state_for_memory(x_t1)
+            # self.memory.end_episode(x_t1_to_save, is_terminal)
             self.preprocessor.history.reset()
             episode_num += 1
             
