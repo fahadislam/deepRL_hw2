@@ -1,6 +1,8 @@
 \documentclass{article}
 
 \usepackage{amsmath}
+\usepackage{graphicx}
+\graphicspath{ {plots/} }
 \title{10-703 Deep Reinforcement Learning and Control \\ Assignment 2 \\}
 \date{}
 
@@ -82,7 +84,7 @@ Loss: Huber loss\\
 We used the parameters that were listed in the reference papers for all of our results.
 
 \subsection*{Evaluation Setup}
-To evaluate the performance we periodically run the learned policy for 20 episodes and average the total reward. During evaluation we always choose the best action according to the learned policy.
+To evaluate the performance we periodically run the learned policy for 20 episodes every 10000 updates and average the total reward. During evaluation we always choose the best action according to the learned policy.
 
 
 
@@ -98,19 +100,28 @@ To evaluate the performance we periodically run the learned policy for 20 episod
 \subsection*{Network model}
 The input to the network consists of an 84x84x4 image . The first hidden layer convolves 16 8x8 filters with stride 4 and applies a rectifier nonlinearity. The second layer convolves 32 4x4 filters with stride 2 also followed by rectifier nonlinearity. The final layer is fully connected and consists of 256 rectifier unit. The output layer is a fully connected linear layer with a single output for each action. In case of SpaceInvaders the number of actions is 6.
 
-%\includegraphics{/plots/dqn.jpg}
+\begin{figure}[h]
+\centering
+\includegraphics[scale=0.3]{dqn.png}
+\end{figure}
 
 \section*{Implement the double deep Q-network}
 \subsection*{Network model}
 The network architecture we used for double-DQN is the same as we used for DQN. The key algorithmic difference is that it decouples the action selection and evaluation steps to prevent overestimations.
 
-%\includegraphics{/plots/double-dqn.jpg}
+\begin{figure}[h]
+\centering
+\includegraphics[scale=0.3]{double.png}
+\end{figure}
 
 \section*{Implement the dueling deep Q-network}
 \subsection*{Network model}
 The first three hidden layers for the dueling-DQN are the same as the model we used for DQN. After that the dueling network splits the model into two streams to separately estimate the state-value and the advantages for each action and the two sets of values are finally combined to get the Q-values at the output.
 
-%\includegraphics{/plots/dueling-dqn.jpg}
+\begin{figure}[h]
+\centering
+\includegraphics[scale=0.3]{duel.png}
+\end{figure}
 
 The table summarizes the average total reward per episode in 100 episodes for the full trained models for all the network models we used for the results.
 \begin{center}
